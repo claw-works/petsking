@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>whale-on-desk 复刻 · pet-study</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: linear-gradient(135deg, #0f2438 0%, #143b52 50%, #1d5673 100%);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #e8f2f8;
+  }
+  #intro { position: absolute; top: 20px; left: 24px; max-width: 46vw; z-index: 10; }
+  #intro h1 { font-size: 20px; margin: 0 0 6px; }
+  #intro p { font-size: 13px; color: #a9c7d8; line-height: 1.6; margin: 4px 0; }
+
+  /* 模拟 Agent 事件面板 */
+  #panel {
+    position: fixed; top: 20px; right: 20px; z-index: 30;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 14px; width: 260px; backdrop-filter: blur(6px);
+  }
+  #panel h2 { font-size: 13px; margin: 0 0 8px; color: #cfe6f2; }
+  #panel .grp { margin-bottom: 10px; }
+  #panel .grp-title { font-size: 11px; color: #7fa8bd; margin-bottom: 4px; }
+  #panel button {
+    font-size: 12px; margin: 2px; padding: 5px 9px; cursor: pointer;
+    background: #1d5673; color: #e8f2f8; border: 1px solid #2d7495; border-radius: 6px;
+  }
+  #panel button:hover { background: #256a8c; }
+  #panel button.hot { background: #c0453a; border-color: #d85a4e; }
+  #panel button.demo { background: #2e9e6b; border-color: #38b87c; width: 100%; margin-top: 6px; }
+
+  /* 成长 HUD */
+  #whale-hud {
+    position: fixed; left: 24px; bottom: 20px; z-index: 30;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 12px 14px; width: 260px; font-size: 12px;
+    backdrop-filter: blur(6px);
+  }
+  #whale-hud .row { margin: 3px 0; }
+  #whale-hud .muted { color: #8fb0c2; }
+  #whale-hud .pill { background: #1d5673; padding: 1px 8px; border-radius: 10px; }
+  #whale-hud .bar { height: 6px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden; margin: 4px 0; }
+  #whale-hud .bar i { display: block; height: 100%; background: linear-gradient(90deg,#38b87c,#5fd6a0); }
+  #whale-hud .mem { margin-top: 6px; font-size: 11px; color: #7fa8bd; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 5px; }
+
+  /* 宠物本体 */
+  .whale-root { position: fixed; right: 24px; bottom: 0; z-index: 40; user-select: none; }
+  .whale-stage { position: relative; width: var(--whale-size, 300px); height: calc(var(--whale-size,300px)*9/16); }
+  .whale-video {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+    opacity: 0; transition: opacity .18s ease; transform-origin: center bottom; pointer-events: none;
+  }
+  .whale-video.is-front { opacity: 1; }
+  .whale-bubble {
+    position: absolute; top: -6px; left: 50%; transform: translateX(-50%) translateY(-100%);
+    background: #fff; color: #143b52; font-size: 12px; padding: 6px 10px; border-radius: 10px;
+    white-space: nowrap; opacity: 0; transition: opacity .2s ease; pointer-events: none;
+  }
+  .whale-bubble.show { opacity: 1; }
+  .whale-bubble::after {
+    content: ''; position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: #fff; border-bottom: 0;
+  }
+</style>
+</head>
+<body>
+  <div id="intro">
+    <h1>🐳 whale-on-desk 复刻</h1>
+    <p>范式：<b>Agent 事件 → 优先级状态机</b>。宠物状态是「响应式」的——不随机，由 Agent 的思考/工具/审批/完成事件折叠成带优先级的状态，再映射到 webm。</p>
+    <p>右侧面板模拟真实 DSH 会话事件（原版由宿主端监听 <code>session/event</code> 得到）。点宠物=戳一下，双击=生气，长按=摸头。完成任务涨 XP、解锁称号。</p>
+  </div>
+
+  <div id="panel">
+    <h2>模拟 Agent 事件</h2>
+    <div class="grp">
+      <div class="grp-title">回合</div>
+      <button data-ev='{"type":"turn/start"}'>turn/start</button>
+      <button data-ev='{"type":"turn/end","reason":"completed"}'>turn/end ✓</button>
+      <button data-ev='{"type":"turn/end","reason":"error"}'>turn/end ✗</button>
+    </div>
+    <div class="grp">
+      <div class="grp-title">流式 / 工具</div>
+      <button data-ev='{"type":"assistant/chunk","kind":"reasoning"}'>think</button>
+      <button data-ev='{"type":"assistant/chunk","kind":"text"}'>chunk</button>
+      <button data-ev='{"type":"tool/call","tool":"edit"}'>tool 写</button>
+      <button data-ev='{"type":"tool/call","tool":"read_file"}'>tool 读</button>
+      <button data-ev='{"type":"tool/result","tool":"git push","ok":true}'>push ✓</button>
+    </div>
+    <div class="grp">
+      <div class="grp-title">审批 / 压缩</div>
+      <button class="hot" data-ev='{"type":"approval/asked"}'>approval 敲玻璃</button>
+      <button data-ev='{"type":"approval/decided","approved":true}'>approve</button>
+      <button data-ev='{"type":"approval/decided","approved":false}'>reject</button>
+      <button data-ev='{"type":"compaction/start"}'>compact</button>
+    </div>
+    <div class="grp">
+      <div class="grp-title">闲置 / 玩耍 / 上下文</div>
+      <button data-ev='{"type":"session/idle"}'>sleep</button>
+      <button data-ev='{"type":"user/antics","kind":"chase-fish"}'>追鱼</button>
+      <button data-ev='{"type":"clock/tick","contextPct":88}'>ctx 88%</button>
+    </div>
+    <button class="demo" id="whale-demo-run">▶ 跑一个完整任务回合</button>
+  </div>
+
+  <div id="whale-hud"></div>
+
+  <script type="module" src="client.js"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>渲染方案③·像素手绘 · pet-study</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: linear-gradient(160deg, #f4ede4, #e7dccb);
+    font-family: -apple-system, "PingFang SC", sans-serif; color: #3a3630; }
+  #intro { position: absolute; top: 20px; left: 24px; max-width: 52vw; z-index: 10; }
+  #intro h1 { font-size: 20px; margin: 0 0 6px; }
+  #intro p { font-size: 13px; color: #6b6357; line-height: 1.6; margin: 4px 0; }
+  code { background: rgba(0,0,0,0.08); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  #stage { position: fixed; right: 8vw; bottom: 12vh; z-index: 20; text-align: center; }
+  #pixel-canvas { width: 120px; height: 140px; cursor: pointer; image-rendering: pixelated;
+    filter: drop-shadow(0 6px 16px rgba(0,0,0,0.2)); }
+  #pixel-picker { margin-top: 12px; }
+  #pixel-picker button { margin: 0 4px; padding: 6px 12px; cursor: pointer;
+    background: #4d6efa; color: #fff; border: none; border-radius: 8px; font-size: 13px; }
+  #pixel-picker button:hover { background: #3a5be0; }
+  #pixel-hud { position: fixed; left: 24px; bottom: 20px; z-index: 20;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.5;
+    color: #4a7a52; background: rgba(255,255,255,0.6); border-radius: 8px; padding: 8px 10px; max-width: 44vw; }
+  #pixel-hud div:first-child { color: #2e5a36; }
+</style>
+</head>
+<body>
+  <div id="intro">
+    <h1>🎨 渲染方案③ · 像素 canvas 手绘（零位图素材）</h1>
+    <p>驱动内核：<b>概率动画链</b>（同首页）。渲染：宠物是 24×28 字符网格 + 调色板，运行时用 canvas <code>fillRect</code> 一格一格画出来——<b>不依赖任何图片文件</b>，纯代码生成美术。</p>
+    <p>美术：dsh-pet-sprite 的三只像素宠物。每个「动作」是一组帧键（走=WA/WB 交替），rAF 按 tick 切帧。点击触发跳跃，下方切换宠物。</p>
+  </div>
+  <div id="stage">
+    <canvas id="pixel-canvas" width="24" height="28"></canvas>
+    <div id="pixel-picker"></div>
+  </div>
+  <div id="pixel-hud"></div>
+  <script type="module" src="client.js"></script>
+</body>
+</html>

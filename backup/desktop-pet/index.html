@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>dsh-desktop-pet 复刻 · pet-study</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: linear-gradient(135deg, #232526 0%, #2c3033 55%, #3a3f43 100%);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #e8e8ea;
+  }
+  #intro { position: absolute; top: 20px; left: 24px; max-width: 44vw; z-index: 10; }
+  #intro h1 { font-size: 20px; margin: 0 0 6px; }
+  #intro p { font-size: 13px; color: #b0b4b8; line-height: 1.6; margin: 4px 0; }
+  code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+  #panel {
+    position: fixed; top: 20px; right: 20px; z-index: 30; width: 270px;
+    background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 14px; backdrop-filter: blur(6px);
+  }
+  #panel h2 { font-size: 13px; margin: 0 0 8px; }
+  #panel .grp-title { font-size: 11px; color: #8f9498; margin: 8px 0 4px; }
+  #panel button {
+    font-size: 12px; margin: 2px; padding: 5px 9px; cursor: pointer;
+    background: #3a4045; color: #e8e8ea; border: 1px solid #50565b; border-radius: 6px;
+  }
+  #panel button:hover { background: #474e54; }
+  #panel button.hot { background: #b3603a; border-color: #cf7a4e; }
+  #panel button.conc { background: #3f6ea5; border-color: #5288c4; width: 100%; margin-top: 8px; }
+  #dp-cmd {
+    width: 100%; box-sizing: border-box; margin-top: 8px; padding: 6px 8px;
+    background: #1a1d1f; color: #9fe3a8; border: 1px solid #50565b; border-radius: 6px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+  }
+
+  #dp-hud {
+    position: fixed; left: 24px; bottom: 20px; z-index: 30; width: 270px; font-size: 12px;
+    background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 12px 14px; backdrop-filter: blur(6px);
+  }
+  #dp-hud .row { margin: 3px 0; }
+  #dp-hud .muted { color: #8f9498; }
+  #dp-hud .pill { background: #3f6ea5; padding: 1px 8px; border-radius: 10px; }
+  #dp-hud .tasks-title { margin: 8px 0 4px; font-size: 11px; color: #8f9498; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 6px; }
+  #dp-hud .trow { font-family: ui-monospace, Menlo, monospace; font-size: 11px; margin: 2px 0; }
+  #dp-hud .trow .p { color: #f0b46c; }
+
+  .dp-root { position: fixed; right: 24px; bottom: 0; z-index: 40; transition: filter .4s ease; }
+  .dp-root.sleeping { filter: brightness(0.55) saturate(0.7); }
+  .dp-stage { position: relative; width: var(--dp-size,300px); height: calc(var(--dp-size,300px)*9/16); }
+  .dp-video {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+    opacity: 0; transition: opacity .18s ease; transform-origin: center bottom;
+  }
+  .dp-video.is-front { opacity: 1; }
+</style>
+</head>
+<body>
+  <div id="intro">
+    <h1>🖥️ dsh-desktop-pet 复刻</h1>
+    <p>范式：<b>确定性语义状态机</b>。事件→状态是纯函数分类（无随机），10 个 SemanticState 折叠到 6 个动画姿势。原版是原生透明窗口 + sprite sheet 逐帧，这里用 webm 表达同一套状态逻辑。</p>
+    <p>亮点：<b>多任务优先级折叠</b>——多个 Agent 并发时取最高优先级（<code>WAITING_FOR_USER > ERROR > WORKING > THINKING > SUCCESS > IDLE</code>）。flash 态 2s 回落，静默 12s 自动 SLEEPING。</p>
+    <p>命令框支持 <code>/pet</code> 式输入：直接敲 <code>THINKING</code> / <code>ERROR</code> / <code>RESET</code>。</p>
+  </div>
+
+  <div id="panel">
+    <h2>模拟归一化事件（单任务 default）</h2>
+    <div class="grp-title">生命周期</div>
+    <button data-ev='{"type":"session.started"}'>session.started</button>
+    <button data-ev='{"type":"session.idle"}'>session.idle</button>
+    <div class="grp-title">活动</div>
+    <button data-ev='{"type":"agent.thinking"}'>agent.thinking</button>
+    <button data-ev='{"type":"tool.started","tool":"edit"}'>tool edit→CODING</button>
+    <button data-ev='{"type":"tool.started","tool":"bash"}'>tool bash→CMD</button>
+    <button data-ev='{"type":"tool.started","tool":"fetch"}'>tool 其它→WORKING</button>
+    <button data-ev='{"type":"tool.completed"}'>tool.completed</button>
+    <div class="grp-title">阻塞 / 终态</div>
+    <button class="hot" data-ev='{"type":"user_input.required"}'>需要审批→WAITING</button>
+    <button data-ev='{"type":"user_input.resolved"}'>审批完成</button>
+    <button data-ev='{"type":"task.completed"}'>task.completed ✓</button>
+    <button data-ev='{"type":"task.failed"}'>task.failed ✗</button>
+
+    <button class="conc" id="dp-concurrency">▶ 多任务并发折叠演示</button>
+    <input id="dp-cmd" placeholder="/pet 命令：THINKING / ERROR / RESET …" />
+  </div>
+
+  <div id="dp-hud"></div>
+
+  <script type="module" src="client.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>渲染方案①·GIF · pet-study</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: linear-gradient(135deg, #0f2438, #1d5673);
+    font-family: -apple-system, "PingFang SC", sans-serif; color: #e8f2f8; }
+  #intro { position: absolute; top: 20px; left: 24px; max-width: 52vw; z-index: 10; }
+  #intro h1 { font-size: 20px; margin: 0 0 6px; }
+  #intro p { font-size: 13px; color: #a9c7d8; line-height: 1.6; margin: 4px 0; }
+  code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  #stage { position: fixed; right: 6vw; bottom: 8vh; z-index: 20; }
+  #gif-pet {
+    width: 140px; height: 140px; object-fit: contain; cursor: pointer;
+    image-rendering: pixelated; /* 像素 GIF 放大不糊 */
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4));
+  }
+  #gif-hud { position: fixed; left: 24px; bottom: 20px; z-index: 20;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.5;
+    color: #9fe3d8; background: rgba(0,0,0,0.4); border-radius: 8px; padding: 8px 10px;
+    max-width: 44vw; }
+  #gif-hud div:first-child { color: #d7fff6; }
+</style>
+</head>
+<body>
+  <div id="intro">
+    <h1>🎞️ 渲染方案① · GIF（&lt;img&gt; 切换）</h1>
+    <p>驱动内核：<b>概率动画链</b>（与首页同款，掷骰加权衔接）。渲染：最朴素方案——一个 <code>&lt;img&gt;</code>，换 <code>src</code> 即换动画。GIF 自带循环与帧时序，前端只决定「何时换哪个 gif」。</p>
+    <p>美术：whale-on-desk 的鲸鱼 GIF（37 个）。点击宠物触发点击回应。</p>
+  </div>
+  <div id="stage"><img id="gif-pet" alt="pet" /></div>
+  <div id="gif-hud"></div>
+  <script type="module" src="client.js"></script>
+</body>
+</html>

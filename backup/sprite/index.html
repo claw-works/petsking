@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>dsh-pet-sprite 复刻 · pet-study</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: linear-gradient(160deg, #f4ede4 0%, #e7dccb 100%);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #3a3630; }
+  #intro { position: absolute; top: 16px; left: 20px; max-width: 42vw; z-index: 20; }
+  #intro h1 { font-size: 20px; margin: 0 0 6px; }
+  #intro p { font-size: 13px; color: #6b6357; line-height: 1.6; margin: 4px 0; }
+  code { background: rgba(0,0,0,0.08); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+  /* 竞技场：模拟聊天滚动区，气泡即平台 */
+  #arena {
+    position: fixed; right: 24px; bottom: 24px; width: 620px; height: 74vh;
+    background: rgba(255,255,255,0.55); border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.12);
+  }
+  /* 消息气泡 = 平台 */
+  .msg { position: absolute; display: flex; }
+  .plat {
+    background: #4d6efa; color: #fff; padding: 12px 16px; border-radius: 14px;
+    font-size: 13px; max-width: 300px; line-height: 1.5; box-shadow: 0 2px 8px rgba(77,110,250,0.3);
+  }
+  .msg.assistant .plat { background: #fff; color: #3a3630; border: 1px solid rgba(0,0,0,0.08); }
+  #composer {
+    position: absolute; left: 16px; right: 16px; bottom: 14px; height: 44px;
+    background: #fff; border: 1px solid rgba(0,0,0,0.12); border-radius: 12px;
+    display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: #9a9284;
+  }
+
+  /* 宠物 */
+  .sp-root { position: absolute; z-index: 10; }
+  .sp-stage { width: 100%; height: 100%; transform-origin: center bottom; }
+  .sp-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+    opacity: 0; transition: opacity .15s ease; }
+  .sp-video.is-front { opacity: 1; }
+
+  /* 控制面板 */
+  #panel { position: fixed; left: 20px; bottom: 20px; z-index: 20; width: 300px;
+    background: rgba(255,255,255,0.72); border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 14px; padding: 14px; }
+  #panel h2 { font-size: 13px; margin: 0 0 8px; }
+  #panel button { font-size: 12px; margin: 2px; padding: 6px 10px; cursor: pointer;
+    background: #4d6efa; color: #fff; border: none; border-radius: 8px; }
+  #panel button:hover { background: #3a5be0; }
+  #panel button.care { background: #f2839b; }
+  #panel .chatrow { display: flex; gap: 6px; margin-top: 8px; }
+  #sp-input { flex: 1; padding: 6px 8px; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; font-size: 12px; }
+
+  #sp-hud { position: fixed; left: 20px; top: 130px; z-index: 20; width: 300px;
+    background: rgba(255,255,255,0.72); border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 14px; padding: 12px 14px; font-size: 12px; }
+  #sp-hud .row { margin: 3px 0; }
+  #sp-hud .muted { color: #8a8272; }
+  #sp-hud .tier { background: #f0d24d; color: #5a4a00; padding: 1px 8px; border-radius: 10px; }
+  #sp-hud .bar { height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden; margin: 4px 0; }
+  #sp-hud .bar > i { display: block; height: 100%; background: linear-gradient(90deg,#4d6efa,#7d97ff); }
+  #sp-hud .attr { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+  #sp-hud .attr span { width: 30px; color: #6b6357; }
+  #sp-hud .attr i { flex: 1; height: 8px; border-radius: 4px; display: block; }
+  #sp-hud .attr b { width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  #sp-flash { position: fixed; left: 50%; top: 30%; transform: translateX(-50%);
+    background: #f0d24d; color: #5a4a00; padding: 10px 20px; border-radius: 12px;
+    font-weight: bold; opacity: 0; transition: opacity .2s; z-index: 50; pointer-events: none; }
+  #sp-flash.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div id="intro">
+    <h1>🐾 dsh-pet-sprite 复刻</h1>
+    <p>范式：<b>物理平台跳跃游戏</b>。宠物不看 Agent 状态，而是一个受重力/碰撞驱动的游戏角色。右侧「聊天区」的蓝色用户气泡就是<b>平台</b>——宠物自主在其间行走、跳跃、下落。</p>
+    <p>点竞技场空白处 <b>接管控制</b>：<code>A/D</code> 移动 · <code>空格/W</code> 跳（空中再按=二段跳）· <code>S</code> 下落。10 秒无操作回自主。养成属性随时间衰减，对话消耗电量、产出经验。</p>
+  </div>
+
+  <div id="arena">
+    <!-- 用户气泡（蓝，可落脚）分布在不同高度，形成平台 -->
+    <div class="msg user" style="left:40px; top:60px;"><div class="plat" style="width:200px">帮我把这个函数改成异步的</div></div>
+    <div class="msg user" style="left:300px; top:180px;"><div class="plat" style="width:180px">再加个错误重试</div></div>
+    <div class="msg assistant" style="left:60px; top:300px;"><div class="plat" style="width:240px">好的，我用 async/await 重写，并加了指数退避重试。（助手气泡不可落脚）</div></div>
+    <div class="msg user" style="left:340px; top:420px;"><div class="plat" style="width:160px">跑一下测试</div></div>
+    <div id="composer">在此输入消息…（输入框也是一个平台）</div>
+  </div>
+
+  <div id="sp-hud"></div>
+
+  <div id="panel">
+    <h2>照顾 & 对话（token 经济）</h2>
+    <button class="care" data-care="feed">🍚 喂食 +power</button>
+    <button class="care" data-care="play">🎮 玩耍 +mood</button>
+    <button class="care" data-care="rest">😴 休息 +health</button>
+    <button class="care" data-care="treat">🍬 零食</button>
+    <div class="chatrow">
+      <input id="sp-input" placeholder="发条消息（掉电量，回复涨经验）" />
+      <button id="sp-chat">发送</button>
+    </div>
+  </div>
+
+  <div id="sp-flash"></div>
+
+  <script type="module" src="client.js"></script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+{
+  "id": "chibi-3d",
+  "renderer": "three",
+  "renderers": [
+    "three"
+  ],
+  "meta": {
+    "name": "3D 小女孩(Three.js)",
+    "description": "Three.js 3D 示范包，内置 chibi 模型 + 关节补间。需页面 importmap 提供 three。"
+  },
+  "aspect": 0.9,
+  "autoSpin": true,
+  "colors": {
+    "skin": "#ffe0d0",
+    "hair": "#6b4a3a",
+    "cloth": "#ff9db0",
+    "skirt": "#e86a86",
+    "cheek": "#ff8fa3",
+    "eye": "#5a3a52"
+  },
+  "actions": {
+    "idle": "idle",
+    "blink": "blink",
+    "wave": "wave",
+    "walk": "walk",
+    "jump": "jump",
+    "cheer": "cheer",
+    "dance": "dance",
+    "nod": "nod",
+    "sleep": "sleep",
+    "shy": "shy"
+  },
+  "chain": {
+    "idle": [
+      "idle",
+      "blink",
+      "nod"
+    ],
+    "actions": [
+      "walk",
+      "wave"
+    ],
+    "categories": [
+      {
+        "id": "运动",
+        "weight": 40,
+        "actions": [
+          "walk",
+          "jump"
+        ]
+      },
+      {
+        "id": "卖萌",
+        "weight": 35,
+        "actions": [
+          "blink",
+          "cheer",
+          "dance"
+        ]
+      },
+      {
+        "id": "情绪",
+        "weight": 25,
+        "actions": [
+          "shy",
+          "nod",
+          "sleep"
+        ]
+      }
+    ],
+    "clicks": [
+      "cheer",
+      "jump",
+      "shy"
+    ],
+    "weights": {
+      "idle": 30,
+      "action": 25
+    }
+  },
+  "stateActions": {
+    "STARTING": "wave",
+    "IDLE": "idle",
+    "THINKING": "nod",
+    "WORKING": "walk",
+    "CODING": "walk",
+    "RUNNING_COMMAND": "walk",
+    "WAITING_FOR_USER": "blink",
+    "SUCCESS": "cheer",
+    "ERROR": "shy",
+    "SLEEPING": "sleep"
+  }
+}

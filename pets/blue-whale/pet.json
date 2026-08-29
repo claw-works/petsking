@@ -1,0 +1,108 @@
+{
+  "id": "blue-whale",
+  "renderer": "webm",
+  "renderers": [
+    "webm"
+  ],
+  "meta": {
+    "name": "蓝鲸小助手",
+    "author": "pet-study",
+    "description": "透明 VP9-alpha webm 桌宠，91 个动作，概率链驱动。素材与程序分离的示范包。"
+  },
+  "assetsDir": "../../assets/thumb/",
+  "geometry": {
+    "aspect": 1.7778,
+    "feetRatio": 0.9167
+  },
+  "actions": {
+    "idle": "待机呼吸休闲.webm",
+    "turn": "东张西望.webm",
+    "drag": "被鼠标拖拽悬空反馈.webm",
+    "click-happy": "点击回应-开心跃动.webm",
+    "click-shy": "点击回应-害羞惊讶.webm",
+    "click-angry": "点击回应-傲娇生气.webm",
+    "click-wave": "点击回应-元气挥手.webm",
+    "walk": "螃蟹走路.webm",
+    "eat": "吃白饭.webm",
+    "play-cube": "原地专心玩魔方.webm",
+    "dance": "可爱宅舞.webm",
+    "code": "写代码.webm",
+    "think": "深度思考碎碎念.webm",
+    "sleep": "原地小憩沉眠.webm",
+    "stretch": "超大伸懒腰.webm",
+    "cheer": "凭空生花.webm",
+    "violin": "小提琴演奏.webm",
+    "flowers": "凭空生花.webm"
+  },
+  "chain": {
+    "idle": [
+      "idle",
+      "sleep"
+    ],
+    "actions": [
+      "walk",
+      "stretch",
+      "think"
+    ],
+    "categories": [
+      {
+        "id": "玩耍",
+        "weight": 40,
+        "actions": [
+          "play-cube",
+          "dance",
+          "violin",
+          "cheer"
+        ]
+      },
+      {
+        "id": "日常",
+        "weight": 35,
+        "actions": [
+          "eat",
+          "code",
+          "flowers"
+        ]
+      },
+      {
+        "id": "张望",
+        "weight": 25,
+        "actions": [
+          "turn"
+        ]
+      }
+    ],
+    "clicks": [
+      "click-happy",
+      "click-shy",
+      "click-angry",
+      "click-wave"
+    ],
+    "weights": {
+      "idle": 30,
+      "action": 25
+    }
+  },
+  "stateActions": {
+    "STARTING": "click-wave",
+    "IDLE": "idle",
+    "THINKING": "think",
+    "WORKING": "code",
+    "CODING": "code",
+    "RUNNING_COMMAND": "code",
+    "WAITING_FOR_USER": "turn",
+    "SUCCESS": "cheer",
+    "ERROR": "click-angry",
+    "SLEEPING": "sleep"
+  },
+  "intentMap": {
+    "greet": "click-wave",
+    "happy": "click-happy",
+    "shy": "click-shy",
+    "angry": "click-angry",
+    "think": "think",
+    "dance": "dance",
+    "sleep": "sleep",
+    "celebrate": "cheer"
+  }
+}

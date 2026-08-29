@@ -1,0 +1,32 @@
+{
+  "id": "whale-gif",
+  "renderer": "gif",
+  "renderers": ["gif"],
+  "meta": { "name": "像素鲸鱼(GIF)", "description": "GIF 渲染示范包，<img> 换 src。" },
+  "assetsDir": "assets/",
+  "aspect": 1,
+  "actions": {
+    "idle": "idle.gif", "sleep": "sleep.gif", "think": "think.gif",
+    "swim": "swim-fast.gif", "review": "review.gif", "eat": "eat.gif",
+    "chase": "chase-fish.gif", "bubble": "bubble-ring.gif", "hide": "hide-and-seek.gif",
+    "excited": "excited.gif", "proud": "proud.gif", "shy": "shy.gif",
+    "celebrate": "celebrate.gif", "birthday": "birthday.gif", "push": "push.gif",
+    "startled": "startled.gif", "flail": "poked-flail.gif", "greet": "greet.gif"
+  },
+  "chain": {
+    "idle": ["idle", "sleep", "think"],
+    "actions": ["swim", "review", "eat"],
+    "categories": [
+      { "id": "玩耍", "weight": 40, "actions": ["chase", "bubble", "hide"] },
+      { "id": "情绪", "weight": 35, "actions": ["excited", "proud", "shy", "celebrate"] },
+      { "id": "节庆", "weight": 25, "actions": ["birthday", "push", "greet"] }
+    ],
+    "clicks": ["startled", "flail", "excited"],
+    "weights": { "idle": 30, "action": 25 }
+  },
+  "stateActions": {
+    "STARTING": "greet", "IDLE": "idle", "THINKING": "think",
+    "WORKING": "swim", "CODING": "swim", "RUNNING_COMMAND": "swim",
+    "WAITING_FOR_USER": "review", "SUCCESS": "celebrate", "ERROR": "startled", "SLEEPING": "sleep"
+  }
+}

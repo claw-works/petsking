@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>文档 · agent-pet</title>
+<style>
+  :root { --bg:#12141f; --fg:#e8eaf2; --muted:#8a90ad; --accent:#5b7cfa; --code:#1c1f2e; }
+  html,body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang SC",sans-serif;line-height:1.75;}
+  .bar{position:sticky;top:0;background:rgba(18,20,31,0.92);backdrop-filter:blur(6px);border-bottom:1px solid rgba(255,255,255,0.08);padding:12px 24px;}
+  .bar a{color:var(--accent);text-decoration:none;font-size:14px;}
+  main{max-width:860px;margin:0 auto;padding:32px 24px 80px;}
+  h1,h2,h3{line-height:1.35;} h1{font-size:28px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:10px;}
+  h2{font-size:22px;margin-top:36px;} h3{font-size:17px;}
+  a{color:var(--accent);}
+  code{background:var(--code);padding:2px 6px;border-radius:4px;font-size:13px;}
+  pre{background:var(--code);padding:14px 16px;border-radius:10px;overflow-x:auto;}
+  pre code{background:none;padding:0;}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;}
+  th,td{border:1px solid rgba(255,255,255,0.12);padding:7px 10px;text-align:left;}
+  th{background:rgba(255,255,255,0.05);}
+  blockquote{border-left:3px solid var(--accent);margin:16px 0;padding:4px 16px;color:var(--muted);}
+  img{max-width:100%;}
+</style>
+</head>
+<body>
+  <div class="bar"><a href="../index.html">← agent-pet 首页</a></div>
+  <main id="content">加载中…</main>
+  <script type="module">
+    import { marked } from 'https://cdn.jsdelivr.net/npm/marked@12/lib/marked.esm.js';
+    const params = new URLSearchParams(location.search);
+    const doc = params.get('doc');
+    const el = document.getElementById('content');
+    if (!doc) { el.textContent = '缺少 ?doc= 参数'; }
+    else {
+      try {
+        const res = await fetch(encodeURIComponent(doc));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const md = await res.text();
+        el.innerHTML = marked.parse(md);
+        document.title = (doc.replace(/\.md$/, '')) + ' · agent-pet';
+      } catch (e) { el.textContent = '加载失败: ' + e.message; }
+    }
+  </script>
+</body>
+</html>

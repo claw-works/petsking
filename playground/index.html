@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Playground · agent-pet</title>
+<style>
+  :root { --bg:#12141f; --panel:#1c1f2e; --line:rgba(255,255,255,0.08); --fg:#e8eaf2; --muted:#8a90ad; --accent:#5b7cfa; }
+  * { box-sizing: border-box; }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang SC",sans-serif;}
+  #app{display:grid;grid-template-columns:1fr 320px;height:100vh;}
+  #stage-area{display:flex;flex-direction:column;}
+  #topbar{padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:10px;align-items:center;}
+  #topbar a{color:var(--accent);font-size:14px;text-decoration:none;}
+  #topbar .title{font-size:15px;font-weight:600;}
+  #stage-top{flex:1;position:relative;}
+  #pet-mount{position:absolute;inset:0;}
+  #ctrlbar{padding:10px 16px;border-top:1px solid var(--line);background:var(--panel);display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  #viewbar{padding:10px 16px;border-top:1px solid var(--line);background:var(--panel);display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  #viewbar input[type=range]{width:140px;}
+  #viewbar input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer;}
+  #viewbar label{display:flex;align-items:center;gap:4px;}
+
+  /* 背景样式（切换 #stage-top 的 class） */
+  #stage-top.bg-checker{background:repeating-conic-gradient(#2b2f42 0% 25%,#212434 0% 50%) 50%/28px 28px;}
+  #stage-top.bg-solid{background:var(--stage-bg,#1e2233);}
+  #stage-top.bg-desktop{background:linear-gradient(135deg,#1e2130 0%,#2a2f45 45%,#3a3f5c 100%);}
+  #stage-top.bg-chat{background:linear-gradient(160deg,#f4ede4,#e7dccb);}
+
+  /* 模拟对话泡泡 */
+  #chat-mock{position:absolute;left:24px;top:24px;right:24px;bottom:24px;display:flex;flex-direction:column;gap:12px;pointer-events:none;z-index:1;overflow-y:auto;padding-right:6px;}
+  #chat-mock .bubble{max-width:78%;padding:11px 15px;border-radius:14px;font-size:13px;line-height:1.6;box-shadow:0 2px 10px rgba(0,0,0,0.18);}
+  #chat-mock .bubble.user{align-self:flex-end;background:#5b7cfa;color:#fff;border-bottom-right-radius:4px;max-width:60%;}
+  #chat-mock .bubble.bot{align-self:flex-start;background:#fff;color:#222;border-bottom-left-radius:4px;}
+  #chat-mock .bubble p{margin:0 0 8px;} #chat-mock .bubble p:last-child{margin-bottom:0;}
+  #chat-mock .bubble ul,#chat-mock .bubble ol{margin:4px 0 8px;padding-left:20px;}
+  #chat-mock .bubble li{margin:2px 0;}
+  #chat-mock .bubble code{background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:4px;font-size:12px;font-family:ui-monospace,Menlo,monospace;}
+  #chat-mock .bubble pre{background:#1c1f2e;color:#e8eaf2;padding:10px 12px;border-radius:8px;overflow-x:auto;margin:6px 0;}
+  #chat-mock .bubble pre code{background:none;padding:0;color:inherit;font-size:12px;line-height:1.5;white-space:pre;}
+  /* 浅色背景（聊天区）时：助手白泡加边框描边，增强对比；整体阴影加深 */
+  #chat-mock.on-light .bubble{box-shadow:0 2px 10px rgba(0,0,0,0.12);}
+  #chat-mock.on-light .bubble.bot{border:1px solid rgba(0,0,0,0.1);}
+  #chat-mock.on-light .bubble.user{background:#4a6bf0;}
+  label{font-size:12px;color:var(--muted);}
+  select,button{font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:#2f3446;color:var(--fg);cursor:pointer;}
+  button:hover{background:#3a4058;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;background:#2f3446;font-size:11px;}
+  #inspector{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:16px;}
+  #inspector h2{font-size:13px;margin:0 0 8px;}
+  .section{margin-bottom:18px;}
+  .meta{font-size:12px;color:var(--muted);line-height:1.6;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .grid button{font-size:11px;}
+  .ai-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
+  .ai-row button{flex:1 1 auto;font-size:11px;}
+  #log{font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.5;background:#14161f;border-radius:8px;padding:8px 10px;max-height:180px;overflow-y:auto;color:#9fe3a8;}
+  #log div:first-child{color:#d7ffdb;}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app">
+  <main id="stage-area">
+    <div id="topbar">
+      <a href="../dashboard/">← Instances</a>
+      <span class="title" id="pet-title">Playground</span>
+      <span class="pill" id="cur-state">state: —</span>
+    </div>
+    <div id="stage-top"><div id="pet-mount"></div>
+      <div id="chat-mock" style="display:none">
+        <div class="bubble user">帮我写个带重试的异步 fetch 封装，最多 3 次，指数退避</div>
+        <div class="bubble bot">
+          <p>好的，我来实现一个带指数退避重试的 <code>fetchWithRetry</code>。整体思路：</p>
+          <ul>
+            <li>失败（网络错误或 5xx）才重试，4xx 直接抛出</li>
+            <li>退避间隔 <code>base * 2^n</code>，并加少量随机抖动避免雪崩</li>
+            <li>超过最大次数后抛出最后一次错误</li>
+          </ul>
+          <pre><code>async function fetchWithRetry(url, opts = {}, max = 3, base = 500) {
+  let lastErr;
+  for (let n = 0; n &lt;= max; n++) {
+    try {
+      const res = await fetch(url, opts);
+      if (res.status &lt; 500) return res;   // 4xx 不重试
+      throw new Error('HTTP ' + res.status);
+    } catch (err) {
+      lastErr = err;
+      if (n === max) break;
+      const wait = base * 2 ** n + Math.random() * 100;
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+  throw lastErr;
+}</code></pre>
+          <p>这样调用即可：<code>await fetchWithRetry('/api/data')</code>。要我把它接到你现有的 logger 上、把每次重试和最终失败都记下来吗？</p>
+        </div>
+        <div class="bubble user">要，用之前那个 logger，再补几个单测</div>
+        <div class="bubble bot">
+          <p>已接入 logger，并加了 4 个用例覆盖主要分支：</p>
+          <ol>
+            <li>首次成功 → 不重试</li>
+            <li>两次 500 后成功 → 重试 2 次</li>
+            <li>持续 500 → 到上限抛出</li>
+            <li>404 → 立即抛出，不重试</li>
+          </ol>
+          <pre><code>test('retries on 5xx then succeeds', async () => {
+  const fetchMock = jest.fn()
+    .mockResolvedValueOnce({ status: 503 })
+    .mockResolvedValueOnce({ status: 200 });
+  const res = await fetchWithRetry('/x', {}, 3, 1);
+  expect(res.status).toBe(200);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});</code></pre>
+          <p>跑了一遍：<b>4 passed</b>，全绿 ✅。日志里能看到每次退避的等待时长。还需要我把它抽成独立模块并写好 JSDoc 吗？</p>
+        </div>
+        <div class="bubble user">先这样，辛苦啦～</div>
+        <div class="bubble bot">不客气！随时叫我继续 🐾</div>
+      </div>
+    </div>
+    <div id="ctrlbar">
+      <label>驱动</label>
+      <select id="sel-driver">
+        <option value="chain">chain 概率链(自主)</option>
+        <option value="statemachine">statemachine 状态机(Agent)</option>
+      </select>
+      <label>渲染器</label>
+      <select id="sel-renderer"></select>
+      <label>朝向</label>
+      <select id="sel-facing"><option value="front">正面</option><option value="left">左</option><option value="right">右</option></select>
+      <button id="btn-click">👆 点击回应</button>
+    </div>
+    <div id="viewbar">
+      <label>大小</label>
+      <input type="range" id="rng-size" min="120" max="520" step="10" value="260" />
+      <span class="pill" id="size-val">260px</span>
+      <label>背景</label>
+      <select id="sel-bg">
+        <option value="checker">棋盘格</option>
+        <option value="solid">纯色</option>
+        <option value="desktop">桌面渐变</option>
+        <option value="chat">聊天区</option>
+      </select>
+      <input type="color" id="bg-color" value="#1e2233" title="纯色背景颜色" />
+      <label><input type="checkbox" id="chk-bubble" /> 对话泡泡</label>
+    </div>
+  </main>
+  <aside id="inspector">
+    <div class="section"><h2>素材信息</h2><div class="meta" id="pet-meta">—</div></div>
+    <div class="section"><h2>动作（点击预览）</h2><div class="grid" id="action-grid"></div></div>
+    <div class="section">
+      <h2>模拟 Agent 事件（需 statemachine 驱动）</h2>
+      <div class="ai-row">
+        <button data-ev='{"type":"session.started"}'>start</button>
+        <button data-ev='{"type":"agent.thinking"}'>thinking</button>
+        <button data-ev='{"type":"tool.started","tool":"edit"}'>tool·edit</button>
+        <button data-ev='{"type":"tool.started","tool":"bash"}'>tool·bash</button>
+      </div>
+      <div class="ai-row">
+        <button data-ev='{"type":"user_input.required"}'>需审批</button>
+        <button data-ev='{"type":"task.completed"}'>完成✓</button>
+        <button data-ev='{"type":"task.failed"}'>失败✗</button>
+        <button data-ev='{"type":"session.idle"}'>idle</button>
+      </div>
+    </div>
+    <div class="section"><h2>意图/情绪表演</h2><div class="ai-row" id="intent-row"></div></div>
+    <div class="section"><h2>事件日志</h2><div id="log"></div></div>
+  </aside>
+</div>
+<script type="module" src="playground.js"></script>
+</body>
+</html>

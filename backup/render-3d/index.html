@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>渲染方案⑤·Three.js 3D · pet-study</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: radial-gradient(circle at 60% 40%, #2a3350, #151a2e 80%);
+    font-family: -apple-system, "PingFang SC", sans-serif; color: #e8ecf8; }
+  #intro { position: absolute; top: 20px; left: 24px; max-width: 46vw; z-index: 10; }
+  #intro h1 { font-size: 20px; margin: 0 0 6px; }
+  #intro p { font-size: 13px; color: #a7afce; line-height: 1.6; margin: 4px 0; }
+  code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  #stage-wrap { position: fixed; right: 4vw; bottom: 6vh; z-index: 20; text-align: center; }
+  #stage3d { width: 360px; height: 400px; cursor: grab; }
+  #stage3d:active { cursor: grabbing; }
+  #picker3d { margin-top: 6px; }
+  #picker3d button { margin: 0 4px; padding: 6px 12px; cursor: pointer;
+    background: #4d6efa; color: #fff; border: none; border-radius: 8px; font-size: 13px; }
+  #picker3d button:hover { background: #3a5be0; }
+  #hud3d { position: fixed; left: 24px; bottom: 20px; z-index: 20;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.5;
+    color: #9fc2ff; background: rgba(0,0,0,0.4); border-radius: 8px; padding: 8px 10px; max-width: 42vw; }
+  #hud3d div:first-child { color: #d0e2ff; }
+  #err { position: fixed; left: 24px; top: 40%; color: #ff9db0; font-size: 13px; max-width: 44vw; z-index: 30; }
+</style>
+
+<!-- Three.js 经 importmap 从 CDN 加载（纯静态，无需打包工具） -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="intro">
+    <h1>🧊 渲染方案⑤ · Three.js 3D</h1>
+    <p>驱动内核：<b>概率动画链</b>（同首页）。渲染：真 3D——宠物由球体/几何体拼成，有<b>实时光照、阴影、透视</b>。动画靠补间各关节的 <code>rotation/position/scale</code>（SVG 骨骼思路扩到三维）。</p>
+    <p>默认缓慢自转看全身；<b>拖拽可手动转视角</b>（松开 4 秒后恢复自转）；点击触发反应，下方切换配色。Three.js 从 CDN 加载，首次需联网。</p>
+  </div>
+  <div id="stage-wrap">
+    <div id="stage3d"></div>
+    <div id="picker3d"></div>
+  </div>
+  <div id="hud3d"></div>
+  <div id="err"></div>
+
+  <script type="module">
+    import('./client.js').catch((e) => {
+      document.getElementById('err').textContent =
+        '加载失败（Three.js 需联网从 CDN 拉取）：' + e.message;
+      console.error(e);
+    });
+  </script>
+</body>
+</html>

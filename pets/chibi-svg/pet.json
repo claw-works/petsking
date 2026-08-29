@@ -1,0 +1,87 @@
+{
+  "id": "chibi-svg",
+  "renderer": "svg",
+  "renderers": [
+    "svg"
+  ],
+  "meta": {
+    "name": "矢量小生物(SVG)",
+    "description": "SVG 矢量骨骼示范包，关节补间，内置 chibi 模型。"
+  },
+  "aspect": 0.9,
+  "colors": {
+    "body": "#4d6efa",
+    "belly": "#dbe4ff",
+    "ink": "#2b2f45",
+    "cheek": "#ff9db0"
+  },
+  "actions": {
+    "idle": "idle",
+    "blink": "blink",
+    "wave": "wave",
+    "walk": "walk",
+    "jump": "jump",
+    "cheer": "cheer",
+    "dance": "dance",
+    "sleep": "sleep",
+    "shy": "shy"
+  },
+  "chain": {
+    "idle": [
+      "idle",
+      "blink"
+    ],
+    "actions": [
+      "walk",
+      "wave"
+    ],
+    "categories": [
+      {
+        "id": "运动",
+        "weight": 40,
+        "actions": [
+          "walk",
+          "jump"
+        ]
+      },
+      {
+        "id": "卖萌",
+        "weight": 35,
+        "actions": [
+          "blink",
+          "cheer",
+          "dance"
+        ]
+      },
+      {
+        "id": "情绪",
+        "weight": 25,
+        "actions": [
+          "shy",
+          "sleep"
+        ]
+      }
+    ],
+    "clicks": [
+      "cheer",
+      "jump",
+      "shy"
+    ],
+    "weights": {
+      "idle": 30,
+      "action": 25
+    }
+  },
+  "stateActions": {
+    "STARTING": "wave",
+    "IDLE": "idle",
+    "THINKING": "walk",
+    "WORKING": "walk",
+    "CODING": "walk",
+    "RUNNING_COMMAND": "walk",
+    "WAITING_FOR_USER": "blink",
+    "SUCCESS": "cheer",
+    "ERROR": "shy",
+    "SLEEPING": "sleep"
+  }
+}

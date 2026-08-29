@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>渲染方案④·SVG 矢量骨骼 · pet-study</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: linear-gradient(160deg, #eef2ff, #dfe6fb);
+    font-family: -apple-system, "PingFang SC", sans-serif; color: #2b2f45; }
+  #intro { position: absolute; top: 20px; left: 24px; max-width: 52vw; z-index: 10; }
+  #intro h1 { font-size: 20px; margin: 0 0 6px; }
+  #intro p { font-size: 13px; color: #5a6078; line-height: 1.6; margin: 4px 0; }
+  code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  #stage-wrap { position: fixed; right: 8vw; bottom: 12vh; z-index: 20; text-align: center; }
+  #svg-stage { width: 150px; height: 165px; cursor: pointer;
+    filter: drop-shadow(0 8px 18px rgba(43,47,69,0.2)); }
+  #svg-picker { margin-top: 12px; }
+  #svg-picker button { margin: 0 4px; padding: 6px 12px; cursor: pointer;
+    background: #4d6efa; color: #fff; border: none; border-radius: 8px; font-size: 13px; }
+  #svg-picker button:hover { background: #3a5be0; }
+  #svg-hud { position: fixed; left: 24px; bottom: 20px; z-index: 20;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.5;
+    color: #4152a8; background: rgba(255,255,255,0.66); border-radius: 8px; padding: 8px 10px; max-width: 44vw; }
+  #svg-hud div:first-child { color: #2b3aa0; }
+</style>
+</head>
+<body>
+  <div id="intro">
+    <h1>🦴 渲染方案④ · SVG 矢量骨骼动画</h1>
+    <p>驱动内核：<b>概率动画链</b>（同首页）。渲染：宠物由矢量图形（<code>path/ellipse</code>）组成，每个部件挂一个<b>关节</b>。动画不是切帧，而是让关节的<b>角度/位移做缓动补间</b>（连续插值）——挥手=转手臂、呼吸=缩身体、走路=四肢反相摆动。</p>
+    <p>特点：无限缩放不糊、零位图素材、体积极小、可程序化换色。点击触发反应，下方切换配色。</p>
+  </div>
+  <div id="stage-wrap">
+    <div id="svg-stage"></div>
+    <div id="svg-picker"></div>
+  </div>
+  <div id="svg-hud"></div>
+  <script type="module" src="client.js"></script>
+</body>
+</html>

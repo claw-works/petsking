@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>渲染方案②·SpriteSheet · pet-study</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: linear-gradient(135deg, #232526, #3a3f43);
+    font-family: -apple-system, "PingFang SC", sans-serif; color: #e8e8ea; }
+  #intro { position: absolute; top: 20px; left: 24px; max-width: 52vw; z-index: 10; }
+  #intro h1 { font-size: 20px; margin: 0 0 6px; }
+  #intro p { font-size: 13px; color: #b0b4b8; line-height: 1.6; margin: 4px 0; }
+  code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  #stage { position: fixed; right: 8vw; bottom: 10vh; z-index: 20;
+    background: repeating-conic-gradient(#33384d 0% 25%, #262a3a 0% 50%) 50% / 20px 20px;
+    border-radius: 12px; padding: 10px; }
+  #sheet-canvas { width: 240px; height: 260px; display: block; cursor: pointer; image-rendering: pixelated; }
+  #sheet-hud { position: fixed; left: 24px; bottom: 20px; z-index: 20;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.5;
+    color: #9fe3a8; background: rgba(0,0,0,0.4); border-radius: 8px; padding: 8px 10px; max-width: 44vw; }
+  #sheet-hud div:first-child { color: #d7ffdb; }
+</style>
+</head>
+<body>
+  <div id="intro">
+    <h1>🧩 渲染方案② · Sprite Sheet 逐帧（canvas 切图）</h1>
+    <p>驱动内核：<b>概率动画链</b>（同首页）。渲染：一张精灵表大图（8列×9行，每格 192×208），canvas 用 <code>drawImage</code> 切出当前帧，按<b>每帧独立时长</b>逐帧循环。时序在代码里显式控制（对比 GIF 把时序封在文件内）。</p>
+    <p>美术：dsh-desktop-pet 的 <code>text</code> 测试精灵表——每个状态一块带标签的色块（占位美术，重点在演示切帧渲染）。点击触发挥手/跳跃。</p>
+  </div>
+  <div id="stage"><canvas id="sheet-canvas" width="192" height="208"></canvas></div>
+  <div id="sheet-hud"></div>
+  <script type="module" src="client.js"></script>
+</body>
+</html>

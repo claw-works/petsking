@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>VP9 Alpha WebM 制作验证 · pet-study</title>
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, "PingFang SC", sans-serif;
+    background: #1b1e2b;
+    color: #e8e8f0;
+    padding: 32px;
+  }
+  h1 { font-size: 20px; }
+  p { color: #b7bad0; line-height: 1.7; max-width: 720px; }
+  .row {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    margin: 24px 0;
+    flex-wrap: wrap;
+  }
+  .card {
+    background: repeating-conic-gradient(#33384d 0% 25%, #262a3a 0% 50%) 50% / 24px 24px;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .card video, .card img { width: 260px; display: block; border-radius: 6px; }
+  .card .label { margin-top: 8px; font-size: 13px; color: #b7bad0; }
+  code {
+    background: rgba(255,255,255,0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  pre {
+    background: #11131c;
+    padding: 12px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <h1>🧪 VP9 Alpha WebM 是怎么做出来的（自制验证）</h1>
+  <p>
+    左边是自制的一段「绿幕素材」（红球在纯绿色背景上弹跳，模拟真实拍摄/AI生成的绿幕视频）；
+    右边是同一段视频经过 <code>colorkey</code> 抠像 + <code>libvpx-vp9</code> 编码后的 <b>真透明</b> webm——
+    棚布背景棋盘格就是浏览器 <code>&lt;video&gt;</code> 元素透出的页面底色，不是黑色，
+    证明 alpha 通道货真价实（不是普通 webm 那种黑底）。
+  </p>
+  <div class="row">
+    <div class="card" style="background:#00FF00">
+      <video src="assets/custom-demo/source_greenscreen.mp4" autoplay loop muted playsinline></video>
+      <div class="label">① 绿幕源视频（h264 mp4，纯绿背景）</div>
+    </div>
+    <div class="card">
+      <video src="assets/custom-demo/ball-bounce-alpha.webm" autoplay loop muted playsinline></video>
+      <div class="label">② 抠像后的 VP9 Alpha webm（真透明）</div>
+    </div>
+    <div class="card">
+      <video src="assets/thumb/待机呼吸休闲.webm" autoplay loop muted playsinline></video>
+      <div class="label">③ dsh-pet 真实素材（同规格对比）</div>
+    </div>
+  </div>
+  <h2 style="font-size:16px">制作命令（ffmpeg 两步）</h2>
+  <pre>步骤一：绿幕拍摄/生成（本例用 lavfi 合成代替真实拍摄或 AI 生成）
+→ 得到 source_greenscreen.mp4（h264, yuv420p, 纯色 #00FF00 背景）
+
+步骤二：抠像 + 编码为透明动画
+ffmpeg -i source_greenscreen.mp4 \
+  -vf "colorkey=0x00FF00:0.30:0.15,format=yuva420p" \
+  -c:v libvpx-vp9 -pix_fmt yuva420p \
+  -b:v 0 -crf 32 -deadline good -cpu-used 4 \
+  out_alpha.webm
+
+关键点：
+  colorkey=颜色:相似度:混合度   —— 把绿幕像素变透明（alpha=0）
+  format=yuva420p              —— 必须转到带 alpha 平面的像素格式
+  -c:v libvpx-vp9               —— 编码器必须是 libvpx-vp9（不是 vp8/x264）
+  -pix_fmt yuva420p             —— 编码时也要显式声明 yuva420p
+  -crf 32 -b:v 0                —— 恒定质量模式（比固定码率更适合动画）</pre>
+  <p>
+    验证结果（用二进制 EBML 解析，逐字节核对容器结构）：自制文件与 dsh-pet 真实素材一样，
+    <code>CodecID = V_VP9</code>、<code>PixelFormat = yuva420p</code>，且都在
+    <code>BlockGroup</code> 里带 <code>BlockAdditions</code>（VP9 alpha 平面存放的位置）——
+    容器层完全同构；差异只在于真实素材的每一帧都单独带 alpha 附加块（因为真实动作的透明区域逐帧变化），
+    而这里的合成 demo 背景纯色不变，多帧共享相同 alpha 数据，属于内容差异，不是编码方式的差异。
+  </p>
+</body>
+</html>
