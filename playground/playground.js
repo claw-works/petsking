@@ -38,7 +38,7 @@ async function rebuild() {
     pet = await createPet({
       pet: petId, petsBaseUrl: PETS_BASE,
       renderer, driver, container: mount,
-      corner: 'center', size: +(document.getElementById('rng-size') ? document.getElementById('rng-size').value : 260), draggable: true,
+      corner: 'center', size: +(document.getElementById('rng-size') ? document.getElementById('rng-size').value : 520), draggable: true,
       ai: { enabled: true }, autoStart: true,
     });
     pet.on('action', ({ action, meta }) => log(`▶ ${action}` + (meta && meta.kind ? ` [${meta.kind}]` : '')));
@@ -50,6 +50,32 @@ async function rebuild() {
     log('❌ 创建失败: ' + e.message);
     mount.innerHTML = '<div style="color:#ff9db0;padding:20px;font-size:13px">创建失败：' + e.message + '</div>';
   }
+}
+
+// —— 手动交互 / 空闲恢复 ——
+// 点面板按钮 = 手动操作：暂停概率链，避免它在背后插动作；
+// 空闲一段时间无操作，自动恢复概率链（自主陪伴）。
+const IDLE_RESUME_MS = 15000;
+let idleTimer = null;
+// 只重置空闲计时（不停驱动）——用于状态机测试，保持状态机运转
+function armIdleResume() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if (!pet) return;
+    if (document.getElementById('sel-driver').value !== 'chain') {
+      document.getElementById('sel-driver').value = 'chain';
+      pet.setDriver('chain');
+    } else if (pet.start) {
+      pet.start();
+    }
+    log('⏱ 空闲 ' + (IDLE_RESUME_MS / 1000) + 's，恢复概率链');
+  }, IDLE_RESUME_MS);
+}
+// 手动预览动作/表情/意图：暂停概率链 + 重置空闲计时
+function manualHold() {
+  if (!pet) return;
+  if (pet.stop) pet.stop();
+  armIdleResume();
 }
 
 function renderMeta() {
@@ -67,18 +93,114 @@ function renderActionGrid() {
   Object.keys(manifest.actions || {}).forEach((a) => {
     const b = document.createElement('button');
     b.textContent = a;
-    b.addEventListener('click', () => { if (pet) { pet.play(a, { loop: true }); log('预览: ' + a); } });
+    b.addEventListener('click', () => { if (pet) { manualHold(); pet.play(a, { loop: true }); log('预览: ' + a); } });
     grid.appendChild(b);
   });
 }
 
+// —— 序列测试：按顺序衔接播放多个动作（前面播完接下一个，最后一个循环）——
+let seqToken = 0;
+function stageVideos() {
+  return [...mount.querySelectorAll('video')];
+}
+function frontVideo() {
+  return stageVideos().find((v) => v.style.opacity === '1') || null;
+}
+function playSequence(names) {
+  if (!pet || !names.length) return;
+  manualHold();                    // 手动操作：暂停链 + 重置空闲计时
+  const token = ++seqToken;        // 新序列使旧序列失效
+  if (pet.stop) pet.stop();        // 暂停 chain，避免干扰
+  let i = 0;
+  const step = () => {
+    if (token !== seqToken) return;
+    const name = names[i];
+    const isLast = i === names.length - 1;
+    pet.play(name, { loop: isLast });
+    log('序列: ' + name + (isLast ? '（循环）' : ''));
+    if (isLast) return;            // 最后一个循环播放，序列结束
+    // 等当前动作的前台视频播完，再接下一个
+    setTimeout(() => {
+      if (token !== seqToken) return;
+      const v = frontVideo();
+      if (!v) { i++; step(); return; }
+      const onEnd = () => { v.removeEventListener('ended', onEnd); if (token === seqToken) { i++; step(); } };
+      v.addEventListener('ended', onEnd);
+      // 兜底：万一 ended 不触发（如已循环），用时长兜底
+      const ms = (isFinite(v.duration) && v.duration > 0 ? v.duration * 1000 : 3000) + 100;
+      setTimeout(() => { if (token === seqToken && !v.ended) { v.removeEventListener('ended', onEnd); i++; step(); } }, ms);
+    }, 200);                       // 给渲染器交叉淡入 + loadeddata 一点时间
+  };
+  step();
+}
+function renderSeqPresets() {
+  const row = document.getElementById('seq-presets');
+  if (!row) return;
+  const acts = Object.keys(manifest.actions || {});
+  const presets = [];
+  if (acts.includes('turn-right') && acts.includes('walk-right')) presets.push(['右转+走', ['turn-right', 'walk-right', 'idle']]);
+  if (acts.includes('turn-left') && acts.includes('walk-left')) presets.push(['左转+走', ['turn-left', 'walk-left', 'idle']]);
+  if (acts.includes('walk-left') && acts.includes('walk-right')) presets.push(['左右往返', ['walk-left', 'idle', 'walk-right', 'idle']]);
+  row.innerHTML = '';
+  presets.forEach(([label, seq]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', () => { document.getElementById('seq-input').value = seq.join(', '); playSequence(seq); });
+    row.appendChild(b);
+  });
+}
+
+function renderEmotes() {
+  const sec = document.getElementById('emote-section');
+  const row = document.getElementById('emote-row');
+  if (!sec || !row) return;
+  const emotes = (manifest.emotes && manifest.emotes.actions) || {};
+  const names = Object.keys(emotes);
+  if (!names.length) { sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  row.innerHTML = '';
+  names.forEach((a) => {
+    const b = document.createElement('button');
+    b.textContent = a;
+    b.addEventListener('click', () => { if (pet && pet.emote) { manualHold(); pet.emote(a); log('表情: ' + a); } });
+    row.appendChild(b);
+  });
+}
+
+// 意图表演时的冒泡台词（残红人设：外冷内热、御姐）——仅 playground 演示用
+const INTENT_SAY = {
+  greet: '嗨，找我什么事？',
+  happy: '嗯，心情不错。',
+  celebrate: '哼哼，就知道会成功。',
+  proud: '哼，这点小事罢了。',
+  shy: '…别、别盯着我看。',
+  sad: '……有点提不起劲。',
+  angry: '再闹，可别怪我。',
+  think: '让我想想…',
+  dance: '别笑，这可是认真的。',
+  sleep: '……有点困了，别吵我。',
+  wave: '走了？下次再聊。',
+  jump: '看我的！',
+  surprised: '诶？什么情况！',
+  love: '爱你哟。',
+  tired: '有点困了呢…',
+  wink: '接住了吗？',
+};
+
 function renderIntents() {
   const row = document.getElementById('intent-row');
+  const map = (manifest.intentMap && Object.keys(manifest.intentMap).length) ? manifest.intentMap : DEFAULT_INTENT_MAP;
   row.innerHTML = '';
-  Object.keys(manifest.intentMap || DEFAULT_INTENT_MAP).forEach((i) => {
+  Object.keys(map).forEach((i) => {
     const b = document.createElement('button');
     b.textContent = i;
-    b.addEventListener('click', () => { if (pet) { pet.react(i); log('意图: ' + i); } });
+    b.addEventListener('click', () => {
+      if (!pet) return;
+      manualHold();
+      pet.react(i);
+      if (INTENT_SAY[i]) pet.say(INTENT_SAY[i], 3000);
+      log('意图: ' + i);
+    });
     row.appendChild(b);
   });
 }
@@ -94,12 +216,28 @@ function bindControls() {
   document.getElementById('sel-driver').addEventListener('change', rebuild);
   document.getElementById('sel-renderer').addEventListener('change', rebuild);
   document.getElementById('sel-facing').addEventListener('change', (e) => { if (pet) pet.setFacing(e.target.value); });
-  document.getElementById('btn-click').addEventListener('click', () => { if (pet) pet.clickAction(); });
+  document.getElementById('btn-click').addEventListener('click', () => { if (pet) { manualHold(); pet.clickAction(); } });
+
+  const seqPlay = document.getElementById('seq-play');
+  if (seqPlay) seqPlay.addEventListener('click', () => {
+    const raw = document.getElementById('seq-input').value.trim();
+    if (!raw) return;
+    const names = raw.split(',').map((s) => s.trim()).filter(Boolean);
+    const valid = names.filter((n) => (manifest.actions || {})[n]);
+    if (!valid.length) { log('⚠ 序列里没有有效动作名'); return; }
+    playSequence(valid);
+  });
 
   document.querySelectorAll('[data-ev]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       if (!pet) return;
-      if (document.getElementById('sel-driver').value !== 'statemachine') { log('⚠ 请先切到 statemachine 驱动'); return; }
+      // 测试 Agent 事件：自动切到状态机（无需手动切），空闲后自动切回概率链
+      if (document.getElementById('sel-driver').value !== 'statemachine') {
+        document.getElementById('sel-driver').value = 'statemachine';
+        await rebuild();
+        log('↔ 自动切到 statemachine 驱动');
+      }
+      armIdleResume();   // 只重置空闲计时，不停状态机（否则 flash/sleep 转换会冻结）
       const ev = JSON.parse(btn.dataset.ev);
       pet.feed(ev); log('feed: ' + ev.type);
     });
@@ -148,6 +286,8 @@ async function main() {
   bindControls();
   renderMeta();
   renderActionGrid();
+  renderSeqPresets();
+  renderEmotes();
   renderIntents();
   await rebuild();
 }

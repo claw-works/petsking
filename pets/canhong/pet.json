@@ -1,0 +1,83 @@
+{
+  "id": "canhong",
+  "renderer": "webm",
+  "renderers": ["webm"],
+  "meta": {
+    "name": "残红(异环)",
+    "author": "pet-study",
+    "description": "御姐风 · 外冷内热。透明 VP9-alpha webm 桌宠，首尾帧生成，左右造型不对称（丝袜腿区分左右）。素材来自游戏画面截图并由 AI 辅助生成，仅供研究学习。"
+  },
+  "assetsDir": "assets/",
+  "geometry": {
+    "aspect": 1.7778,
+    "feetRatio": 0.965
+  },
+  "actions": {
+    "idle": "idle.webm",
+    "drag": "drag.webm",
+    "click-happy": "click-happy.webm",
+    "walk-left": "walk-left.webm",
+    "walk-right": "walk-right.webm",
+    "turn-right": "turn-right.webm",
+    "turn-left": "turn-left.webm",
+    "click-wave": "click-wave.webm",
+    "think": { "file": "think-full.webm", "loop": true, "from": 20, "loopFrom": 24, "loopTo": 72 },
+    "work": "work.webm",
+    "cheer": "cheer.webm",
+    "error": "error.webm",
+    "sleep": "sleep.webm"
+  },
+  "chain": {
+    "idle": ["idle", "sleep"],
+    "actions": ["walk-left", "walk-right", "turn-left", "turn-right"],
+    "categories": [
+      { "id": "日常", "weight": 15, "actions": ["think"] }
+    ],
+    "clicks": ["click-happy"],
+    "weights": { "idle": 50, "action": 35 }
+  },
+  "stateActions": {
+    "STARTING": "click-wave",
+    "IDLE": "idle",
+    "THINKING": "think",
+    "WORKING": "work",
+    "CODING": "work",
+    "RUNNING_COMMAND": "work",
+    "WAITING_FOR_USER": "turn-right",
+    "SUCCESS": "cheer",
+    "ERROR": "error",
+    "SLEEPING": "sleep"
+  },
+  "intentMap": {
+    "happy": "emo-happy",
+    "shy": "emo-shy",
+    "proud": "emo-proud",
+    "angry": "emo-angry",
+    "surprised": "emo-surprised",
+    "sad": "emo-sad",
+    "think": "emo-think",
+    "love": "emo-love",
+    "tired": "emo-tired"
+  },
+  "emotes": {
+    "aspect": 1.7778,
+    "actions": {
+      "emo-happy": "emo-happy.webm",
+      "emo-shy": "emo-shy.webm",
+      "emo-proud": "emo-proud.webm",
+      "emo-angry": "emo-angry.webm",
+      "emo-surprised": "emo-surprised.webm",
+      "emo-sad": "emo-sad.webm",
+      "emo-think": "emo-think.webm",
+      "emo-love": "emo-love.webm",
+      "emo-tired": "emo-tired.webm",
+      "emo-wink": "emo-wink.webm"
+    }
+  },
+  "walk": {
+    "left": "walk-left",
+    "right": "walk-right",
+    "speed": 55,
+    "margin": 20
+  }
+}

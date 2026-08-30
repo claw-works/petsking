@@ -13,7 +13,7 @@
 
 /** 标准事件类型（StateDriver.resolveEvent 认识的） */
 export const STD_EVENTS = [
-  'session.started', 'session.idle', 'agent.thinking',
+  'session.started', 'session.idle', 'agent.thinking', 'agent.thinking.done',
   'tool.started', 'tool.completed', 'user_input.required',
   'user_input.resolved', 'task.completed', 'task.failed',
 ];
@@ -26,9 +26,10 @@ export const DEFAULT_EVENT_MAP = {
   // 会话
   'session/start': 'session.started', 'session.start': 'session.started', 'start': 'session.started',
   'session/idle': 'session.idle', 'idle': 'session.idle',
-  // 思考 / 流式
+  // 思考 / 流式（起止事件驱动，无固定时长）
   'assistant/chunk': 'agent.thinking', 'message.delta': 'agent.thinking',
   'reasoning': 'agent.thinking', 'thinking': 'agent.thinking',
+  'reasoning.done': 'agent.thinking.done', 'thinking.done': 'agent.thinking.done',
   // 工具
   'tool/call': 'tool.started', 'tool.start': 'tool.started', 'tool_use': 'tool.started',
   'tool/result': 'tool.completed', 'tool.end': 'tool.completed', 'tool_result': 'tool.completed',
@@ -92,7 +93,14 @@ export class AgentBridge {
    */
   reactTo(intent) {
     const action = this.intentMap[intent];
-    if (action) this.pet.play(action, { loop: false, kind: 'REACT:' + intent });
+    if (!action) return action;
+    // 若映射到的是表情特写（在 pack.emotes.actions 里），走特写弹层；否则本体播放
+    const emotes = this.pet.pack && this.pet.pack.emotes;
+    if (emotes && emotes.actions && emotes.actions[action] && this.pet.emote) {
+      this.pet.emote(action);
+    } else {
+      this.pet.play(action, { loop: false, kind: 'REACT:' + intent });
+    }
     return action;
   }
 

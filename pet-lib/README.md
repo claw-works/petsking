@@ -118,8 +118,12 @@ pet.react('happy');                            // 意图/情绪表演
 ## AI / Agent 接入
 
 **标准事件**（`pet.feed` / `bridge.dispatch` 归一化到这些）：
-`session.started · session.idle · agent.thinking · tool.started · tool.completed ·
+`session.started · session.idle · agent.thinking · agent.thinking.done · tool.started · tool.completed ·
 user_input.required · user_input.resolved · task.completed · task.failed`
+
+`agent.thinking` 与 `tool.started` 一样是起止事件驱动、无固定时长——思考多久、工具跑多久由
+调用方实际状态决定，driver 不猜测超时。必须显式喂 `agent.thinking.done`（或转到其它状态事件）才会
+离开 THINKING，否则会一直停留。
 
 状态机把事件按语义分类、多任务按优先级折叠
 （`WAITING_FOR_USER > ERROR > WORKING > THINKING > SUCCESS > IDLE > SLEEPING`），

@@ -5,11 +5,11 @@
 //
 // config：
 //   stateActions: { SEMANTIC: actionName }   状态→动作映射（来自素材包）
-//   flashMs, sleepAfterMs, thinkingMs         计时
+//   flashMs, sleepAfterMs                     计时
 //   idleAction                                默认 idle 动作名
 //
 // 外部通过 pet.feed(event) → driver.feed(event) 喂事件（见 ai/agent-bridge.js）。
-import { DriverBase, registerDriver } from './driver-base.js';
+import { DriverBase, registerDriver, createDriver } from './driver-base.js';
 
 export const SEMANTIC_PRIORITY = {
   WAITING_FOR_USER: 60, ERROR: 50,
@@ -31,6 +31,7 @@ export function resolveEvent(ev) {
     case 'session.started': return { state: 'STARTING', flash: true };
     case 'session.idle': return { state: 'IDLE' };
     case 'agent.thinking': return { state: 'THINKING' };
+    case 'agent.thinking.done': return { state: 'IDLE' };
     case 'tool.started': return { state: classifyTool(ev.tool || '') };
     case 'tool.completed': return { state: 'IDLE' };
     case 'user_input.required': return { state: 'WAITING_FOR_USER' };
@@ -47,7 +48,6 @@ export class StateDriver extends DriverBase {
     this.stateActions = config.stateActions || {};
     this.idleAction = config.idleAction || 'idle';
     this.flashMs = config.flashMs ?? 2000;
-    this.thinkingMs = config.thinkingMs ?? 2000;
     this.sleepAfterMs = config.sleepAfterMs ?? 60_000;
     this.minStateMs = config.minStateMs ?? 250;
     this.clickAction = config.clickAction || null;
@@ -57,10 +57,33 @@ export class StateDriver extends DriverBase {
     this.lastChangeAt = 0;
     this.lastActivityAt = Date.now();
     this._timer = null;
+    // IDLE 时委托给概率链做自主陪伴（若提供了 chain 池配置）
+    this._chainConfig = config.chain || null;
+    this._idleChain = null;
+  }
+
+  /** 惰性创建内部概率链，其动作转发给本驱动的 onAction */
+  _ensureIdleChain() {
+    if (this._idleChain || !this._chainConfig) return;
+    try {
+      this._idleChain = createDriver('chain', { ...this._chainConfig });
+      this._idleChain.onAction((action, meta) => {
+        // 只有仍处于 IDLE 时才转发链的动作（防止竞态）
+        if (this.state === 'IDLE') this._emit(action, { ...meta, kind: 'IDLE' });
+      });
+    } catch (e) { this._idleChain = null; }
+  }
+
+  _startIdleChain() {
+    this._ensureIdleChain();
+    if (this._idleChain) this._idleChain.start();
+  }
+  _stopIdleChain() {
+    if (this._idleChain) this._idleChain.stop();
   }
 
   start() { this._emitState('IDLE'); this._timer = setInterval(() => this._recompute(), 200); }
-  stop() { if (this._timer) clearInterval(this._timer); this._timer = null; }
+  stop() { if (this._timer) clearInterval(this._timer); this._timer = null; this._stopIdleChain(); }
 
   /** 喂归一化 Agent 事件 */
   feed(ev) {
@@ -75,7 +98,6 @@ export class StateDriver extends DriverBase {
     const t = this.tasks.get(id) || {};
     t.state = r.state;
     if (r.flash) t.flashUntil = now + this.flashMs;
-    if (r.state === 'THINKING') t.thinkUntil = now + this.thinkingMs;
     this.tasks.set(id, t);
     this.lastActivityAt = now;
     this._recompute();
@@ -88,7 +110,6 @@ export class StateDriver extends DriverBase {
     for (const t of this.tasks.values()) {
       let s = t.state;
       if (FLASH.has(s) && (t.flashUntil || 0) <= now) s = 'IDLE';
-      if (s === 'THINKING' && (t.thinkUntil || 0) <= now) s = 'IDLE';
       const p = SEMANTIC_PRIORITY[s];
       if (p > bp) { best = s; bp = p; }
     }
@@ -98,7 +119,8 @@ export class StateDriver extends DriverBase {
   _recompute() {
     const now = Date.now();
     let next = this._fold();
-    if (next === 'IDLE' && now - this.lastActivityAt >= this.sleepAfterMs) next = 'SLEEPING';
+    // 有概率链接管 IDLE 时，不再自动转 SLEEPING（打盹已在概率链 idle 池里，由链随机触发）
+    if (next === 'IDLE' && !this._chainConfig && now - this.lastActivityAt >= this.sleepAfterMs) next = 'SLEEPING';
     if (next === this.state) return;
     if (now - this.lastChangeAt < this.minStateMs && SEMANTIC_PRIORITY[next] <= SEMANTIC_PRIORITY[this.state]) return;
     this.state = next; this.lastChangeAt = now;
@@ -106,8 +128,14 @@ export class StateDriver extends DriverBase {
   }
 
   _emitState(state) {
+    if (state === 'IDLE' && this._chainConfig) {
+      // IDLE 且有概率链配置 → 委托概率链做自主陪伴（走动/转身/思考/打盹）
+      this._startIdleChain();
+      return;
+    }
+    // 离开 IDLE（进入工作/睡眠等状态）→ 停掉自主陪伴，按状态播动作
+    this._stopIdleChain();
     const action = this.stateActions[state] || this.idleAction;
-    // SLEEPING/IDLE 循环；flash/工作态多为一次性但也循环播（webm 循环安全）
     this._emit(action, { loop: true, kind: state });
   }
 

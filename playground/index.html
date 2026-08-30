@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Playground · agent-pet</title>
+<title>Playground · Pet's King</title>
 <style>
   :root { --bg:#12141f; --panel:#1c1f2e; --line:rgba(255,255,255,0.08); --fg:#e8eaf2; --muted:#8a90ad; --accent:#5b7cfa; }
   * { box-sizing: border-box; }
@@ -65,8 +65,10 @@
 <div id="app">
   <main id="stage-area">
     <div id="topbar">
-      <a href="../dashboard/">← Instances</a>
-      <span class="title" id="pet-title">Playground</span>
+      <a href="../index.html">首页</a>
+      <a href="../dashboard/">宠物库</a>
+      <a href="https://github.com/claw-works/petsking" target="_blank" rel="noopener">GitHub ↗</a>
+      <span class="title" id="pet-title" style="margin-left:auto">Playground</span>
       <span class="pill" id="cur-state">state: —</span>
     </div>
     <div id="stage-top"><div id="pet-mount"></div>
@@ -134,8 +136,8 @@
     </div>
     <div id="viewbar">
       <label>大小</label>
-      <input type="range" id="rng-size" min="120" max="520" step="10" value="260" />
-      <span class="pill" id="size-val">260px</span>
+      <input type="range" id="rng-size" min="120" max="640" step="10" value="520" />
+      <span class="pill" id="size-val">520px</span>
       <label>背景</label>
       <select id="sel-bg">
         <option value="checker">棋盘格</option>
@@ -151,12 +153,24 @@
     <div class="section"><h2>素材信息</h2><div class="meta" id="pet-meta">—</div></div>
     <div class="section"><h2>动作（点击预览）</h2><div class="grid" id="action-grid"></div></div>
     <div class="section">
+      <h2>序列测试（衔接连播）</h2>
+      <div class="ai-row" id="seq-presets"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="seq-input" type="text" placeholder="turn-right, walk-right, idle"
+          style="flex:1;background:#12141f;border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e8eaf2;padding:8px 10px;font-size:12px" />
+        <button id="seq-play">播放</button>
+      </div>
+      <div style="font-size:11px;color:#8a90ad;margin-top:6px">按顺序依次播放（前面的播完自动接下一个，最后一个循环）。测试转身→走路是否连贯。</div>
+    </div>
+    <div class="section">
       <h2>模拟 Agent 事件（需 statemachine 驱动）</h2>
       <div class="ai-row">
         <button data-ev='{"type":"session.started"}'>start</button>
         <button data-ev='{"type":"agent.thinking"}'>thinking</button>
+        <button data-ev='{"type":"agent.thinking.done"}'>thinking·done</button>
         <button data-ev='{"type":"tool.started","tool":"edit"}'>tool·edit</button>
         <button data-ev='{"type":"tool.started","tool":"bash"}'>tool·bash</button>
+        <button data-ev='{"type":"tool.completed"}'>tool·done</button>
       </div>
       <div class="ai-row">
         <button data-ev='{"type":"user_input.required"}'>需审批</button>
@@ -165,6 +179,7 @@
         <button data-ev='{"type":"session.idle"}'>idle</button>
       </div>
     </div>
+    <div class="section" id="emote-section" style="display:none"><h2>表情特写（半身弹层）</h2><div class="ai-row" id="emote-row"></div><div style="font-size:11px;color:#8a90ad;margin-top:6px">在本体上方弹半身近景播表情，播完自动消失，不影响本体。</div></div>
     <div class="section"><h2>意图/情绪表演</h2><div class="ai-row" id="intent-row"></div></div>
     <div class="section"><h2>事件日志</h2><div id="log"></div></div>
   </aside>
