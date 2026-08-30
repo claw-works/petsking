@@ -74,7 +74,7 @@ export async function loadAssetPack(pet, petsBaseUrl = 'pets/') {
   if (assets.baseUrl == null) assets.baseUrl = baseDir + (manifest.assetsDir || 'assets/');
   else if (!/^https?:|^\//.test(assets.baseUrl)) assets.baseUrl = baseDir + assets.baseUrl;
   // 透传渲染几何/网格/调色板等
-  for (const k of ['geometry', 'grid', 'sheet', 'palette', 'frames', 'colors', 'model', 'frameMs', 'autoSpin']) {
+  for (const k of ['geometry', 'grid', 'sheet', 'palette', 'frames', 'colors', 'model', 'frameMs', 'autoSpin', 'fps']) {
     if (manifest[k] != null && assets[k] == null) assets[k] = manifest[k];
   }
   if (assets.actions == null) assets.actions = manifest.actions || {};
@@ -86,6 +86,9 @@ export async function loadAssetPack(pet, petsBaseUrl = 'pets/') {
     chain: manifest.chain || null,          // 概率链池配置（chain 驱动用）
     stateActions: manifest.stateActions || null, // 状态→动作（statemachine 驱动用）
     intentMap: manifest.intentMap || null,  // 意图→动作（AI 用）
+    emotes: manifest.emotes || null,        // 表情特写弹层（半身近景，独立于本体）
+    walk: manifest.walk || null,            // 走动位移：{ left, right, speed(px/s), margin(px) }
+    fps: manifest.fps || null,              // 帧率（webm 渲染器用于把 action 的 from/to 帧号换算成秒）
     meta: manifest.meta || {},
   };
 }

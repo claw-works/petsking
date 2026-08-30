@@ -35,18 +35,21 @@ export class ChainDriver extends DriverBase {
     this.categories = config.categories || [];
     this.clicks = config.clicks || [];
     this.weights = config.weights || { idle: 40, action: 30 };
-    this._playMs = config.playMs || (() => 2600);
+    this._playMs = config.playMs || (() => 8000 + Math.random() * 12000);
     this.timer = null;
     this.paused = false;
   }
 
   _ms(action) { return typeof this._playMs === 'function' ? this._playMs(action) : this._playMs; }
 
-  start() { this._chain(pick(this.idle), 'IDLE'); }
+  start() { this.paused = false; this._chain(pick(this.idle), 'IDLE'); }
   stop() { if (this.timer) { clearTimeout(this.timer); this.timer = null; } this.paused = true; }
 
   _chain(action, kind) {
-    this._emit(action, { loop: false, kind });
+    this.current = action;
+    // loop:true —— 动作在展示窗口内持续循环播放，避免非循环动作播完后卡在最后一帧
+    // 直到 playMs 到点再掷骰切下一个。
+    this._emit(action, { loop: true, kind });
     if (this.timer) clearTimeout(this.timer);
     if (this.paused) return;
     this.timer = setTimeout(() => this.pickNext(), this._ms(action));

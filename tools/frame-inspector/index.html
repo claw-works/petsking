@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>帧检查器 · Pet's King</title>
+<style>
+  :root { --bg:#12141f; --panel:#1c1f2e; --line:rgba(255,255,255,0.08); --fg:#e8eaf2; --muted:#8a90ad; --accent:#5b7cfa; --accent-2:#b06dff; --good:#46d18a; --warn:#ffb020; }
+  * { box-sizing: border-box; }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;}
+  #app{display:grid;grid-template-columns:1fr 340px;height:100vh;}
+  #stage-area{display:flex;flex-direction:column;overflow:hidden;}
+  #topbar{padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:10px;align-items:center;}
+  #topbar a{color:var(--accent);font-size:14px;text-decoration:none;}
+  #topbar .title{font-size:15px;font-weight:600;margin-left:auto;}
+  #topbar .pill{display:inline-block;padding:2px 8px;border-radius:10px;background:#2f3446;font-size:11px;color:var(--muted);}
+
+  #dropzone{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:repeating-conic-gradient(#2b2f42 0% 25%,#212434 0% 50%) 50%/28px 28px;overflow:hidden;}
+  #dropzone.dragover{outline:3px dashed var(--accent); outline-offset:-3px;}
+  #empty-hint{color:var(--muted);text-align:center;font-size:13px;line-height:1.8;}
+  #empty-hint b{color:var(--fg);}
+  #canvas-wrap{position:relative;display:none;max-width:100%;max-height:100%;}
+  #canvas-wrap.show{display:block;}
+  #stage-canvas{display:block;max-width:100%;max-height:100%;}
+  #frame-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.65);color:#fff;font-family:ui-monospace,Menlo,monospace;
+    font-size:13px;padding:6px 12px;border-radius:8px;line-height:1.5;pointer-events:none;}
+  #frame-badge .n{font-size:20px;font-weight:700;color:#ffe08a;}
+  #frame-badge .lp{color:#8be9a4;}
+
+  #scrubber-wrap{padding:10px 16px 4px;border-top:1px solid var(--line);background:var(--panel);}
+  #scrubber{width:100%;position:relative;height:28px;}
+  #scrubber input[type=range]{width:100%;margin:0;}
+  #loop-markers{position:relative;height:6px;margin-top:-4px;}
+  #loop-markers .seg{position:absolute;height:4px;background:var(--accent);opacity:0.5;border-radius:2px;top:0;}
+
+  #ctrlbar{padding:10px 16px;border-top:1px solid var(--line);background:var(--panel);display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  #ctrlbar .grp{display:flex;gap:4px;align-items:center;border-right:1px solid var(--line);padding-right:10px;margin-right:2px;}
+  #ctrlbar .grp:last-child{border-right:none;}
+  label{font-size:12px;color:var(--muted);}
+  select,button,input[type=text],input[type=number],input[type=file]{font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:#2f3446;color:var(--fg);}
+  button{cursor:pointer;}
+  button:hover{background:#3a4058;}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  button.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));border-color:transparent;font-weight:600;}
+  button.primary:hover{filter:brightness(1.1);}
+  input[type=number]{width:64px;}
+  #frame-input{width:76px;font-family:ui-monospace,Menlo,monospace;}
+
+  #inspector{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:16px;}
+  #inspector h2{font-size:13px;margin:0 0 8px;color:var(--fg);}
+  .section{margin-bottom:20px;}
+  .section .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6;}
+  .meta{font-size:12px;color:var(--muted);line-height:1.8;}
+  .meta b{color:var(--fg);}
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+  .row label{flex-shrink:0;width:64px;}
+  .row input,.row select{flex:1;}
+  .loop-btns{display:flex;gap:6px;}
+  .loop-btns button{flex:1;}
+  #code-out{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.6;background:#0c0e17;border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-all;color:#8fd6a0;max-height:180px;overflow-y:auto;}
+  #copy-btn{width:100%;margin-top:6px;}
+  .badge-ok{color:var(--good);}
+  .badge-warn{color:var(--warn);}
+  #diff-hint{font-size:11px;color:var(--muted);margin-top:4px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <main id="stage-area">
+    <div id="topbar">
+      <a href="../../index.html">首页</a>
+      <a href="../../playground/?pet=blue-whale">Playground</a>
+      <a href="https://github.com/claw-works/petsking" target="_blank" rel="noopener">GitHub ↗</a>
+      <span class="title">🎞️ 帧检查器</span>
+      <span class="pill" id="file-pill">未加载文件</span>
+    </div>
+
+    <div id="dropzone">
+      <div id="empty-hint">
+        📂 拖入或选择一个 <b>.webm</b> 文件开始<br>
+        用来逐帧核查透明视频，判断循环起止点（<b>loopFrom / loopTo</b>）
+      </div>
+      <div id="canvas-wrap">
+        <canvas id="stage-canvas"></canvas>
+        <div id="frame-badge">帧 <span class="n" id="badge-frame">0</span> / <span id="badge-total">0</span><br><span class="lp" id="badge-loop"></span></div>
+      </div>
+      <video id="src-video" style="display:none" muted playsinline></video>
+    </div>
+
+    <div id="scrubber-wrap">
+      <div id="scrubber"><input type="range" id="frame-slider" min="0" max="0" value="0" step="1" disabled /></div>
+      <div id="loop-markers"></div>
+    </div>
+
+    <div id="ctrlbar">
+      <div class="grp">
+        <input type="file" id="file-input" accept="video/webm,.webm" />
+      </div>
+      <div class="grp">
+        <button id="btn-first" disabled title="第一帧">⏮</button>
+        <button id="btn-prev10" disabled title="-10 帧">-10</button>
+        <button id="btn-prev" disabled title="上一帧 (←)">◀</button>
+        <button id="btn-play" disabled title="播放/暂停 (空格)">▶</button>
+        <button id="btn-next" disabled title="下一帧 (→)">▶</button>
+        <button id="btn-next10" disabled title="+10 帧">+10</button>
+        <button id="btn-last" disabled title="最后一帧">⏭</button>
+      </div>
+      <div class="grp">
+        <label for="frame-input">跳转帧</label>
+        <input type="number" id="frame-input" min="0" value="0" disabled />
+        <label for="fps-input">FPS</label>
+        <input type="number" id="fps-input" min="1" max="120" value="24" style="width:48px" />
+      </div>
+      <div class="grp">
+        <label><input type="checkbox" id="chk-loop-preview" disabled /> 循环预览</label>
+      </div>
+    </div>
+  </main>
+
+  <aside id="inspector">
+    <div class="section">
+      <h2>文件信息</h2>
+      <div class="meta" id="file-meta">未加载文件</div>
+    </div>
+
+    <div class="section">
+      <h2>循环起止点标记</h2>
+      <div class="row">
+        <label>loopFrom</label>
+        <input type="number" id="loop-from" min="0" value="0" disabled />
+        <button id="set-from" disabled>取当前帧</button>
+      </div>
+      <div class="row">
+        <label>loopTo</label>
+        <input type="number" id="loop-to" min="0" value="0" disabled />
+        <button id="set-to" disabled>取当前帧</button>
+      </div>
+      <div class="loop-btns">
+        <button id="goto-from" disabled>⇤ 跳到 loopFrom</button>
+        <button id="goto-to" disabled>跳到 loopTo ⇥</button>
+      </div>
+      <div class="hint" id="loop-hint">先加载文件，逐帧找到姿态相位一致的两帧作为循环起止点。</div>
+    </div>
+
+    <div class="section">
+      <h2>相位差异对比</h2>
+      <div class="hint">与「当前帧」比较，帮助判断某帧是否适合作循环端点（数值越小越接近）。</div>
+      <div class="row">
+        <button id="diff-vs-from" disabled style="flex:1">当前帧 vs loopFrom</button>
+      </div>
+      <div id="diff-hint">—</div>
+    </div>
+
+    <div class="section">
+      <h2>pet.json 片段</h2>
+      <div class="row">
+        <label>动作名</label>
+        <input type="text" id="action-name" value="walk-left" />
+      </div>
+      <div class="row">
+        <label>文件名</label>
+        <input type="text" id="action-file" value="walk-left.webm" />
+      </div>
+      <pre id="code-out">{}</pre>
+      <button id="copy-btn">📋 复制到剪贴板</button>
+    </div>
+
+    <div class="section">
+      <h2>使用提示</h2>
+      <div class="hint">
+        · ← / → 逐帧移动，Shift+← / Shift+→ 跳 10 帧<br>
+        · 空格 播放/暂停（按当前 loopFrom~loopTo 循环预览，未标记则播放全片）<br>
+        · FPS 需与素材实际帧率一致（项目素材统一 24fps）才能保证帧号准确<br>
+        · 只做前端逐帧浏览，不修改/上传原始文件
+      </div>
+    </div>
+  </aside>
+</div>
+<script type="module" src="inspector.js"></script>
+</body>
+</html>

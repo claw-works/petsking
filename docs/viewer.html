@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>文档 · agent-pet</title>
+<title>文档 · Pet's King</title>
 <style>
   :root { --bg:#12141f; --fg:#e8eaf2; --muted:#8a90ad; --accent:#5b7cfa; --code:#1c1f2e; }
   html,body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang SC",sans-serif;line-height:1.75;}
@@ -24,7 +24,7 @@
 </style>
 </head>
 <body>
-  <div class="bar"><a href="../index.html">← agent-pet 首页</a></div>
+  <div class="bar"><a href="../index.html">← Pet's King 首页</a></div>
   <main id="content">加载中…</main>
   <script type="module">
     import { marked } from 'https://cdn.jsdelivr.net/npm/marked@12/lib/marked.esm.js';
@@ -38,7 +38,7 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const md = await res.text();
         el.innerHTML = marked.parse(md);
-        document.title = (doc.replace(/\.md$/, '')) + ' · agent-pet';
+        document.title = (doc.replace(/\.md$/, '')) + " · Pet's King";
       } catch (e) { el.textContent = '加载失败: ' + e.message; }
     }
   </script>

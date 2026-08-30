@@ -3,15 +3,26 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Instances · agent-pet Dashboard</title>
+<title>Instances · Pet's King Dashboard</title>
 <style>
   :root { --bg:#12141f; --card:#1c1f2e; --line:rgba(255,255,255,0.08); --fg:#e8eaf2; --muted:#8a90ad; --accent:#5b7cfa; }
   * { box-sizing: border-box; }
   html,body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang SC",sans-serif;}
   a{color:inherit;text-decoration:none;}
   .wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
-  header{padding:28px 0 8px;display:flex;align-items:center;justify-content:space-between;}
-  header h1{font-size:22px;margin:0;} header .back{color:var(--accent);font-size:14px;}
+  /* top nav */
+  .nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    background:rgba(18,20,31,0.72);border-bottom:1px solid var(--line);}
+  .nav .wrap{display:flex;align-items:center;justify-content:space-between;height:56px;}
+  .nav .brand{display:flex;align-items:center;gap:10px;font-weight:700;}
+  .nav .brand .dot{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font-size:14px;background:var(--accent);}
+  .nav .links{display:flex;gap:6px;align-items:center;}
+  .nav .links a{padding:7px 13px;border-radius:9px;font-size:13.5px;color:var(--muted);transition:.15s;}
+  .nav .links a:hover{color:var(--fg);background:rgba(255,255,255,0.06);}
+  .nav .links a.cur{color:var(--fg);}
+  .nav .links a.ghost{border:1px solid var(--line);}
+  header{padding:28px 0 8px;}
+  header h1{font-size:22px;margin:0;}
   .sub{color:var(--muted);font-size:14px;margin:2px 0 20px;}
   .group{margin-bottom:32px;}
   .group h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
@@ -29,10 +40,19 @@
 </style>
 </head>
 <body>
+<nav class="nav">
+  <div class="wrap">
+    <div class="brand"><span class="dot">🐾</span> Pet's King</div>
+    <div class="links">
+      <a href="../index.html">首页</a>
+      <a class="cur" href="./">宠物库</a>
+      <a class="ghost" href="https://github.com/claw-works/petsking" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
 <div class="wrap">
   <header>
     <h1>🎛️ Instances</h1>
-    <a class="back" href="../index.html">← agent-pet 首页</a>
   </header>
   <p class="sub">按渲染方案分组，浏览所有可用的宠物 instance（素材包 × 渲染器组合）。点卡片进 Playground。</p>
   <div id="groups"></div>
