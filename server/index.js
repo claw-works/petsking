@@ -1,5 +1,6 @@
 // server/index.js — Bun.serve 主入口：静态站点 + 注册/登录 + WebSocket 聊天
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { openDb } from './db.js';
 import { createUserStore } from './user-store.js';
 import { registerUser, loginUser, AuthError } from './auth-flow.js';
@@ -15,7 +16,9 @@ if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required (see .env.examp
 const PET_ID = 'blue-whale';
 const ROOT = new URL('../', import.meta.url);
 
-const db = openDb(process.env.DB_PATH || './data/petsking.sqlite');
+const dbPath = process.env.DB_PATH || './data/petsking.sqlite';
+mkdirSync(dirname(dbPath), { recursive: true });
+const db = openDb(dbPath);
 const users = createUserStore(db);
 const conversations = new SqliteConversationStore(db);
 const provider = new BedrockProvider({
@@ -27,9 +30,12 @@ const soul = readFileSync(new URL('pets/blue-whale/soul.md', ROOT), 'utf8');
 const petManifest = JSON.parse(readFileSync(new URL('pets/blue-whale/pet.json', ROOT), 'utf8'));
 const intents = Object.keys(petManifest.intentMap || {});
 
+const STATIC_ALLOWLIST = ['chat/', 'pets/', 'pet-lib/'];
+
 async function serveStatic(pathname) {
   if (pathname.includes('..')) return new Response('bad path', { status: 400 });
   const rel = pathname === '/' ? 'chat/index.html' : pathname.replace(/^\//, '');
+  if (!STATIC_ALLOWLIST.some((prefix) => rel.startsWith(prefix))) return null;
   const file = Bun.file(new URL(rel, ROOT));
   if (await file.exists()) return new Response(file);
   return null;
