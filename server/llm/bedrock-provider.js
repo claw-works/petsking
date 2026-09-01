@@ -21,6 +21,13 @@ export class BedrockProvider {
     let toolInputJson = '';
 
     for await (const event of response.stream) {
+      const fault =
+        event.internalServerException ||
+        event.modelStreamErrorException ||
+        event.throttlingException ||
+        event.validationException ||
+        event.serviceUnavailableException;
+      if (fault) throw fault;
       if (event.contentBlockStart?.start?.toolUse) {
         toolName = event.contentBlockStart.start.toolUse.name;
         toolInputJson = '';
@@ -35,8 +42,8 @@ export class BedrockProvider {
         try {
           const input = JSON.parse(toolInputJson || '{}');
           yield { type: 'tool_call', name: toolName, input };
-        } catch {
-          // 模型吐出的工具参数不是合法 JSON，忽略这次调用，不影响文字流
+        } catch (err) {
+          console.warn('perform_action 工具参数不是合法 JSON，忽略这次调用:', toolInputJson, err);
         }
         toolName = null;
       }
