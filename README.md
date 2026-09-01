@@ -63,6 +63,29 @@ pet.say('搞定啦～');                                          // 冒泡说�
 
 ---
 
+## 💬 角色培养聊天
+
+一个可跑起来的示例应用：邮箱密码登录后，与桌宠角色（当前仅 `blue-whale`）打字聊天，回复由 Amazon Bedrock（Claude）驱动，并可通过 tool-use 触发桌宠动画；每个用户的对话历史落地 SQLite 持久化。
+
+前置条件：
+
+- 已安装 [Bun](https://bun.sh)
+- 一个具备 Bedrock 访问权限的 AWS 账号，且已在该账号里启用所选模型（默认用跨区域推理配置 ID `us.anthropic.claude-sonnet-4-5-...`）
+
+```sh
+bun install
+cp .env.example .env
+# 编辑 .env：JWT_SECRET 填一个随机字符串；AWS_REGION / BEDROCK_MODEL_ID 按你的 AWS 账号调整
+bun run server
+# 打开 http://localhost:8787/，注册账号即可开始聊天
+```
+
+> 当前限定单角色（blue-whale）；登录态 30 天后过期，过期需清浏览器数据重新登录，暂未做应用内自动续期 —— 这是当前 MVP 的已知取舍，不是待修 bug。
+
+设计文档：[character-chat-design.md](docs/superpowers/specs/2026-09-01-character-chat-design.md) · 实施计划：[character-chat.md](docs/superpowers/plans/2026-09-01-character-chat.md)。
+
+---
+
 ## 🗂️ 仓库结构
 
 ```
@@ -79,6 +102,8 @@ pets/           素材包（程序/素材分离）
 assets/         共享素材（91 个透明 webm）
 dashboard/      Instance 列表页
 playground/     宠物调试台
+server/         角色培养聊天：Bun 服务端（鉴权 + WebSocket 聊天 + Bedrock + SQLite）
+chat/           角色培养聊天：前端页面
 docs/           渲染方案 / 驱动范式 / webm 素材生产规范（viewer.html 可在线看）
 backup/         早期实验页归档
 ```
