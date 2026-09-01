@@ -93,11 +93,15 @@ function connectWs(token) {
   });
 
   ws.addEventListener('close', () => {
-    appendMessage('assistant', '（连接断开，刷新页面重试）');
+    localStorage.removeItem(TOKEN_KEY);
+    appendMessage('assistant', '（登录已失效或连接断开，请重新登录）');
+    chatPanel.classList.add('hidden');
+    authPanel.classList.remove('hidden');
   });
 }
 
 async function startChat(token) {
+  chatLog.innerHTML = '';
   authPanel.classList.add('hidden');
   chatPanel.classList.remove('hidden');
   await mountPet();
