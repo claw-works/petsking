@@ -1,0 +1,13 @@
+{
+  "name": "petsking",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "server": "bun run server/index.js",
+    "test": "bun test server"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1123.0",
+    "jose": "^6.2.10"
+  }
+}

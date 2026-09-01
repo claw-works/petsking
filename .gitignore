@@ -7,3 +7,6 @@ build.log
 
 # 宠物素材目录（体积大，只跟踪 pet.json 配置，不跟踪具体素材文件）
 pets/*/assets/
+
+.env
+data/
