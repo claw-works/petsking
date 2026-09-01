@@ -33,6 +33,9 @@ const intents = Object.keys(petManifest.intentMap || {});
 const STATIC_ALLOWLIST = ['chat/', 'pets/', 'pet-lib/'];
 
 async function serveStatic(pathname) {
+  // url.pathname is already dot-segment-normalized by the URL constructor, so this
+  // can't currently be hit — kept as defense-in-depth in case pathname is ever
+  // built differently (e.g. from a raw header) without that normalization.
   if (pathname.includes('..')) return new Response('bad path', { status: 400 });
   const rel = pathname === '/' ? 'chat/index.html' : pathname.replace(/^\//, '');
   if (!STATIC_ALLOWLIST.some((prefix) => rel.startsWith(prefix))) return null;
