@@ -94,9 +94,9 @@ function connectWs(token) {
 
   ws.addEventListener('close', () => {
     localStorage.removeItem(TOKEN_KEY);
-    appendMessage('assistant', '（登录已失效或连接断开，请重新登录）');
     chatPanel.classList.add('hidden');
     authPanel.classList.remove('hidden');
+    authError.textContent = '登录已失效或连接断开，请重新登录';
   });
 }
 
