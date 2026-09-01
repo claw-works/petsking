@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>残红 · 陪伴聊天</title>
+<link rel="stylesheet" href="chat.css" />
+</head>
+<body>
+  <div id="auth-panel" class="panel">
+    <h1>残红 · 陪伴聊天</h1>
+    <form id="auth-form">
+      <input id="email" type="email" placeholder="邮箱" required />
+      <input id="password" type="password" placeholder="密码" required />
+      <div class="auth-actions">
+        <button type="submit">登录</button>
+        <button type="button" id="register-btn">注册</button>
+      </div>
+      <p id="auth-error" class="error"></p>
+    </form>
+  </div>
+
+  <div id="chat-panel" class="panel hidden">
+    <div id="pet-mount"></div>
+    <div id="chat-log"></div>
+    <form id="chat-form">
+      <input id="chat-input" type="text" placeholder="跟她说点什么…" autocomplete="off" />
+      <button type="submit">发送</button>
+    </form>
+  </div>
+
+  <script type="module" src="chat.js"></script>
+</body>
+</html>
