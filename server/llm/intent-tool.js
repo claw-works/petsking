@@ -8,7 +8,7 @@ export function buildPerformActionTool(intents) {
         json: {
           type: 'object',
           properties: {
-            intent: { type: 'string', enum: intents },
+            intent: { type: 'string', enum: [...intents] },
           },
           required: ['intent'],
         },
