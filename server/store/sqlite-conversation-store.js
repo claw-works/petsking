@@ -16,7 +16,9 @@ export class SqliteConversationStore {
   listMessages(userId, petId, limit = 50) {
     return this.db
       .query(
-        `SELECT role, content, action, created_at FROM messages WHERE user_id = ? AND pet_id = ? ORDER BY created_at ASC LIMIT ?`
+        `SELECT role, content, action, created_at FROM (
+          SELECT role, content, action, created_at FROM messages WHERE user_id = ? AND pet_id = ? ORDER BY created_at DESC LIMIT ?
+        ) ORDER BY created_at ASC`
       )
       .all(userId, petId, limit);
   }
