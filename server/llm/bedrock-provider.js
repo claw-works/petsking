@@ -1,10 +1,16 @@
 // server/llm/bedrock-provider.js — 用 Bedrock Converse Stream API 实现 LlmProvider 契约
 import { BedrockRuntimeClient, ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { buildPerformActionTool } from './intent-tool.js';
 
 export class BedrockProvider {
   constructor({ region, modelId }) {
-    this.client = new BedrockRuntimeClient({ region });
+    // Bun's http2 client hangs indefinitely against the AWS SDK's default
+    // NodeHttp2Handler for bedrock-runtime (confirmed during Task 15 manual
+    // verification: both ConverseCommand and ConverseStreamCommand time out
+    // with "http2 request did not get a response" under `bun run`). Forcing
+    // the HTTP/1.1 handler avoids that and streams correctly.
+    this.client = new BedrockRuntimeClient({ region, requestHandler: new NodeHttpHandler() });
     this.modelId = modelId;
   }
 
@@ -12,7 +18,16 @@ export class BedrockProvider {
     const command = new ConverseStreamCommand({
       modelId: this.modelId,
       system: [{ text: system }],
-      messages: messages.map((m) => ({ role: m.role, content: [{ text: m.content }] })),
+      // Bedrock's Converse API rejects empty/whitespace-only text content blocks.
+      // A stored turn can legitimately have empty text when the model responded
+      // with only a perform_action tool call and no words (confirmed live during
+      // Task 15 manual verification — it broke the very next turn with
+      // "text content blocks must be non-empty" otherwise). Fall back to a small
+      // non-empty placeholder so history replay stays valid.
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: [{ text: m.content && m.content.trim() ? m.content : '...' }],
+      })),
       toolConfig: { tools: [buildPerformActionTool(intents)] },
     });
 
