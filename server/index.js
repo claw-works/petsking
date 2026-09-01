@@ -23,7 +23,7 @@ const users = createUserStore(db);
 const conversations = new SqliteConversationStore(db);
 const provider = new BedrockProvider({
   region: process.env.AWS_REGION || 'us-east-1',
-  modelId: process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  modelId: process.env.BEDROCK_MODEL_ID || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
 });
 
 const soul = readFileSync(new URL('pets/blue-whale/soul.md', ROOT), 'utf8');
@@ -91,6 +91,8 @@ Bun.serve({
         return;
       }
       if (msg.type !== 'user_message' || typeof msg.text !== 'string') return;
+      if (ws.data.turnInFlight) return; // drop concurrent messages on the same connection
+      ws.data.turnInFlight = true;
 
       try {
         for await (const event of runChatTurn({
@@ -106,6 +108,8 @@ Bun.serve({
         }
       } catch (e) {
         ws.send(JSON.stringify({ type: 'error', message: e.message }));
+      } finally {
+        ws.data.turnInFlight = false;
       }
     },
   },

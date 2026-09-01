@@ -13,20 +13,31 @@ export async function* runChatTurn({ userId, petId, text, store, provider, soul,
 
   let fullText = '';
   let lastAction = null;
+  let persisted = false;
 
-  for await (const event of provider.streamChat({ system, messages, intents })) {
-    if (event.type === 'text_delta') {
-      fullText += event.delta;
-      yield { type: 'text_delta', delta: event.delta };
-    } else if (event.type === 'tool_call' && event.name === 'perform_action') {
-      const intent = event.input?.intent;
-      if (intents.includes(intent)) {
-        lastAction = intent;
-        yield { type: 'action', intent };
+  try {
+    for await (const event of provider.streamChat({ system, messages, intents })) {
+      if (event.type === 'text_delta') {
+        fullText += event.delta;
+        yield { type: 'text_delta', delta: event.delta };
+      } else if (event.type === 'tool_call' && event.name === 'perform_action') {
+        const intent = event.input?.intent;
+        if (intents.includes(intent)) {
+          lastAction = intent;
+          yield { type: 'action', intent };
+        }
+      } else if (event.type === 'done') {
+        store.appendMessage(userId, petId, { role: 'assistant', content: fullText, action: lastAction });
+        persisted = true;
+        yield { type: 'done' };
       }
-    } else if (event.type === 'done') {
-      store.appendMessage(userId, petId, { role: 'assistant', content: fullText, action: lastAction });
-      yield { type: 'done' };
     }
+  } catch (err) {
+    // 流中断（例如 Bedrock 报错）时，已经吐给用户看到的部分回复也要落库，
+    // 否则下一轮历史里会"凭空"缺一段用户已经读到的文本。
+    if (!persisted && fullText) {
+      store.appendMessage(userId, petId, { role: 'assistant', content: fullText, action: lastAction });
+    }
+    throw err;
   }
 }

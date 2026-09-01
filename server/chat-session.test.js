@@ -107,3 +107,40 @@ test('runChatTurn tells the model how long it has been since the previous messag
 
   expect(provider.calls[0].system).toContain('距离上次聊天已经过去 3 天');
 });
+
+test('runChatTurn persists the partial assistant reply if the provider stream throws mid-stream', async () => {
+  const store = createFakeStore();
+  const provider = {
+    async *streamChat() {
+      yield { type: 'text_delta', delta: '你好' };
+      yield { type: 'text_delta', delta: '呀' };
+      throw new Error('bedrock exploded');
+    },
+  };
+
+  const out = [];
+  let caught;
+  try {
+    for await (const ev of runChatTurn({
+      userId: 'u1',
+      petId: 'blue-whale',
+      text: '嗨',
+      store,
+      provider,
+      soul: '你是一只友好的宠物。',
+      intents: ['greet', 'happy'],
+    })) out.push(ev);
+  } catch (e) {
+    caught = e;
+  }
+
+  expect(caught).toBeInstanceOf(Error);
+  expect(caught.message).toBe('bedrock exploded');
+  expect(out).toEqual([
+    { type: 'text_delta', delta: '你好' },
+    { type: 'text_delta', delta: '呀' },
+  ]);
+  expect(store._all).toHaveLength(2);
+  expect(store._all[0]).toMatchObject({ role: 'user', content: '嗨' });
+  expect(store._all[1]).toMatchObject({ role: 'assistant', content: '你好呀', action: null });
+});
