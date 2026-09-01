@@ -29,6 +29,12 @@ export class BedrockProvider {
         content: [{ text: m.content && m.content.trim() ? m.content : '...' }],
       })),
       toolConfig: { tools: [buildPerformActionTool(intents)] },
+      // Without an explicit cap, Bedrock can default maxTokens to the model's
+      // absolute maximum output length, reserving a large token budget per
+      // request — a common cause of unexpected cost and ThrottlingExceptions.
+      // This pet persona replies in one or two sentences (see soul.md), so
+      // 1024 is a generous-but-bounded cap, not a functional restriction.
+      inferenceConfig: { maxTokens: 1024 },
     });
 
     const response = await this.client.send(command);
