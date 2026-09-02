@@ -1,18 +1,11 @@
-// chat/chat.js — 登录/注册 + WebSocket 聊天客户端 + pet-lib 挂载
+// chat/chat.js — 聊天页：无 token 跳登录页，pet-lib 挂载 + WebSocket 聊天
 import { createPet } from '../pet-lib/index.js';
 
 const TOKEN_KEY = 'petsking_token';
 const params = new URLSearchParams(location.search);
 const PET_ID = params.get('pet') || 'blue-whale';
 
-const authPanel = document.getElementById('auth-panel');
-const chatPanel = document.getElementById('chat-panel');
-const authForm = document.getElementById('auth-form');
-const authError = document.getElementById('auth-error');
-const authTitle = document.getElementById('auth-title');
-const emailInput = document.getElementById('email');
-const passwordInput = document.getElementById('password');
-const registerBtn = document.getElementById('register-btn');
+const petTitle = document.getElementById('pet-title');
 const chatLog = document.getElementById('chat-log');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
@@ -20,6 +13,11 @@ const chatInput = document.getElementById('chat-input');
 let pet = null;
 let ws = null;
 let assistantBubble = null;
+
+function goToLogin() {
+  localStorage.removeItem(TOKEN_KEY);
+  location.href = 'login.html?pet=' + encodeURIComponent(PET_ID);
+}
 
 async function loadPetName() {
   let name = PET_ID;
@@ -31,36 +29,8 @@ async function loadPetName() {
     // 拿不到就用 id 兜底，不影响后续流程
   }
   document.title = name + ' · 陪伴聊天';
-  authTitle.textContent = name + ' · 陪伴聊天';
+  petTitle.textContent = name;
 }
-
-async function authRequest(path) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: emailInput.value, password: passwordInput.value }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || '请求失败');
-  return body.token;
-}
-
-async function handleAuth(path) {
-  authError.textContent = '';
-  try {
-    const token = await authRequest(path);
-    localStorage.setItem(TOKEN_KEY, token);
-    startChat(token);
-  } catch (e) {
-    authError.textContent = e.message;
-  }
-}
-
-authForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  handleAuth('/api/login');
-});
-registerBtn.addEventListener('click', () => handleAuth('/api/register'));
 
 function appendMessage(role, text) {
   const el = document.createElement('div');
@@ -79,7 +49,7 @@ async function mountPet() {
     driver: 'chain',
     container: '#pet-mount',
     corner: 'center',
-    size: 260,
+    size: 360,
     draggable: false,
     ai: { enabled: true },
     autoStart: true,
@@ -107,20 +77,7 @@ function connectWs(token) {
     }
   });
 
-  ws.addEventListener('close', () => {
-    localStorage.removeItem(TOKEN_KEY);
-    chatPanel.classList.add('hidden');
-    authPanel.classList.remove('hidden');
-    authError.textContent = '登录已失效或连接断开，请重新登录';
-  });
-}
-
-async function startChat(token) {
-  chatLog.innerHTML = '';
-  authPanel.classList.add('hidden');
-  chatPanel.classList.remove('hidden');
-  await mountPet();
-  connectWs(token);
+  ws.addEventListener('close', goToLogin);
 }
 
 chatForm.addEventListener('submit', (e) => {
@@ -132,6 +89,15 @@ chatForm.addEventListener('submit', (e) => {
   chatInput.value = '';
 });
 
-loadPetName();
-const existingToken = localStorage.getItem(TOKEN_KEY);
-if (existingToken) startChat(existingToken);
+async function start() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) {
+    goToLogin();
+    return;
+  }
+  await loadPetName();
+  await mountPet();
+  connectWs(token);
+}
+
+start();
