@@ -2,12 +2,14 @@
 import { createPet } from '../pet-lib/index.js';
 
 const TOKEN_KEY = 'petsking_token';
-const PET_ID = 'blue-whale';
+const params = new URLSearchParams(location.search);
+const PET_ID = params.get('pet') || 'blue-whale';
 
 const authPanel = document.getElementById('auth-panel');
 const chatPanel = document.getElementById('chat-panel');
 const authForm = document.getElementById('auth-form');
 const authError = document.getElementById('auth-error');
+const authTitle = document.getElementById('auth-title');
 const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const registerBtn = document.getElementById('register-btn');
@@ -18,6 +20,19 @@ const chatInput = document.getElementById('chat-input');
 let pet = null;
 let ws = null;
 let assistantBubble = null;
+
+async function loadPetName() {
+  let name = PET_ID;
+  try {
+    const res = await fetch(`../pets/${PET_ID}/pet.json`);
+    const manifest = await res.json();
+    if (manifest.meta && manifest.meta.name) name = manifest.meta.name;
+  } catch {
+    // 拿不到就用 id 兜底，不影响后续流程
+  }
+  document.title = name + ' · 陪伴聊天';
+  authTitle.textContent = name + ' · 陪伴聊天';
+}
 
 async function authRequest(path) {
   const res = await fetch(path, {
@@ -73,7 +88,7 @@ async function mountPet() {
 
 function connectWs(token) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
+  ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&pet=${encodeURIComponent(PET_ID)}`);
 
   ws.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data);
@@ -117,5 +132,6 @@ chatForm.addEventListener('submit', (e) => {
   chatInput.value = '';
 });
 
+loadPetName();
 const existingToken = localStorage.getItem(TOKEN_KEY);
 if (existingToken) startChat(existingToken);
