@@ -8,12 +8,12 @@ import { verifyToken } from './auth.js';
 import { SqliteConversationStore } from './store/sqlite-conversation-store.js';
 import { BedrockProvider } from './llm/bedrock-provider.js';
 import { runChatTurn } from './chat-session.js';
+import { buildPetRegistry } from './pet-registry.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required (see .env.example)');
 
-const PET_ID = 'blue-whale';
 const ROOT = new URL('../', import.meta.url);
 
 const dbPath = process.env.DB_PATH || './data/petsking.sqlite';
@@ -26,18 +26,27 @@ const provider = new BedrockProvider({
   modelId: process.env.BEDROCK_MODEL_ID || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
 });
 
-const soul = readFileSync(new URL('pets/blue-whale/soul.md', ROOT), 'utf8');
-const petManifest = JSON.parse(readFileSync(new URL('pets/blue-whale/pet.json', ROOT), 'utf8'));
-const intents = Object.keys(petManifest.intentMap || {});
+const petsIndex = JSON.parse(readFileSync(new URL('pets/index.json', ROOT), 'utf8'));
+const PET_REGISTRY = buildPetRegistry(petsIndex, {
+  readManifest: (entry) => JSON.parse(readFileSync(new URL('pets/' + entry.path, ROOT), 'utf8')),
+  readSoul: (entry) => {
+    try {
+      return readFileSync(new URL(`pets/${entry.id}/soul.md`, ROOT), 'utf8');
+    } catch {
+      return null;
+    }
+  },
+});
 
-const STATIC_ALLOWLIST = ['chat/', 'pets/', 'pet-lib/'];
+const STATIC_ALLOWLIST = ['chat/', 'pets/', 'pet-lib/', 'dashboard/', 'playground/', 'docs/', 'assets/', 'tools/', 'index.html'];
 
 async function serveStatic(pathname) {
   // url.pathname is already dot-segment-normalized by the URL constructor, so this
   // can't currently be hit — kept as defense-in-depth in case pathname is ever
   // built differently (e.g. from a raw header) without that normalization.
   if (pathname.includes('..')) return new Response('bad path', { status: 400 });
-  const rel = pathname === '/' ? 'chat/index.html' : pathname.replace(/^\//, '');
+  let rel = pathname === '/' ? 'index.html' : pathname.replace(/^\//, '');
+  if (rel.endsWith('/')) rel += 'index.html';
   if (!STATIC_ALLOWLIST.some((prefix) => rel.startsWith(prefix))) return null;
   const file = Bun.file(new URL(rel, ROOT));
   if (await file.exists()) return new Response(file);
@@ -51,14 +60,16 @@ Bun.serve({
 
     if (url.pathname === '/ws') {
       const token = url.searchParams.get('token');
+      const petId = url.searchParams.get('pet');
       if (!token) return new Response('missing token', { status: 401 });
+      if (!petId || !PET_REGISTRY.has(petId)) return new Response('unknown pet', { status: 400 });
       let userId;
       try {
         userId = await verifyToken(token, JWT_SECRET);
       } catch {
         return new Response('invalid token', { status: 401 });
       }
-      const ok = server.upgrade(req, { data: { userId } });
+      const ok = server.upgrade(req, { data: { userId, petId } });
       return ok ? undefined : new Response('upgrade failed', { status: 400 });
     }
 
@@ -97,10 +108,11 @@ Bun.serve({
       if (ws.data.turnInFlight) return; // drop concurrent messages on the same connection
       ws.data.turnInFlight = true;
 
+      const { soul, intents } = PET_REGISTRY.get(ws.data.petId);
       try {
         for await (const event of runChatTurn({
           userId: ws.data.userId,
-          petId: PET_ID,
+          petId: ws.data.petId,
           text: msg.text,
           store: conversations,
           provider,
