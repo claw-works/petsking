@@ -51,16 +51,21 @@ async function main() {
     const grid = document.createElement('div');
     grid.className = 'grid';
     for (const pack of list) {
-      const card = document.createElement('a');
+      const card = document.createElement('div');
       card.className = 'card';
-      card.href = `../playground/?pet=${encodeURIComponent(pack.id)}&renderer=${encodeURIComponent(r)}`;
+      const playgroundHref = `../playground/?pet=${encodeURIComponent(pack.id)}&renderer=${encodeURIComponent(r)}`;
+      const chatHref = `../chat/index.html?pet=${encodeURIComponent(pack.id)}`;
+      const canChat = (pack.renderers || []).includes('webm');
       card.innerHTML =
         `<div class="ico">${info.icon}</div>` +
         `<h3>${pack.meta.name || pack.name || pack.id}</h3>` +
         `<p>${pack.meta.description || ''}</p>` +
         `<div class="rtags">${(pack.renderers || []).map((x) => `<span class="rtag">${x}</span>`).join('')}` +
         `<span class="rtag" style="background:rgba(255,255,255,0.06);color:#8a90ad">${pack.actions} 动作</span></div>` +
-        `<span class="go">进 Playground →</span>`;
+        `<div class="card-actions">` +
+          `<a href="${playgroundHref}">🎭 展示皮肤 →</a>` +
+          (canChat ? `<a href="${chatHref}">💬 互动 →</a>` : '') +
+        `</div>`;
       grid.appendChild(card);
     }
     group.appendChild(grid);
