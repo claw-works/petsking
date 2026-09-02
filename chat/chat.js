@@ -35,6 +35,21 @@ async function loadPetName() {
   petTitle.textContent = name;
 }
 
+async function loadHistory(token) {
+  try {
+    const res = await fetch(`/api/history?pet=${encodeURIComponent(PET_ID)}`, {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    if (!res.ok) return;
+    const { messages } = await res.json();
+    for (const m of messages) {
+      if (m.role === 'user' || m.role === 'assistant') appendMessage(m.role, m.content);
+    }
+  } catch {
+    // 拉历史失败不影响继续聊天，就当没有历史
+  }
+}
+
 function appendMessage(role, text) {
   const el = document.createElement('div');
   el.className = 'msg ' + role;
@@ -114,6 +129,7 @@ async function start() {
     return;
   }
   await loadPetName();
+  await loadHistory(token);
   await mountPet();
   connectWs(token);
 }

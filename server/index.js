@@ -91,6 +91,22 @@ Bun.serve({
       }
     }
 
+    if (url.pathname === '/api/history' && req.method === 'GET') {
+      const auth = req.headers.get('authorization') || '';
+      const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null;
+      const petId = url.searchParams.get('pet');
+      if (!token) return new Response('missing token', { status: 401 });
+      if (!petId || !PET_REGISTRY.has(petId)) return new Response('unknown pet', { status: 400 });
+      let userId;
+      try {
+        userId = await verifyToken(token, JWT_SECRET);
+      } catch {
+        return new Response('invalid token', { status: 401 });
+      }
+      const messages = conversations.listMessages(userId, petId, 50);
+      return Response.json({ messages });
+    }
+
     const staticRes = await serveStatic(url.pathname);
     if (staticRes) return staticRes;
 
