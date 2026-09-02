@@ -1,42 +1,76 @@
 :root {
   color-scheme: dark;
+  --bg:#0b0d14;
+  --bg-soft:#11131d;
+  --card:#161927;
+  --card-hi:#1c2033;
+  --line:rgba(255,255,255,0.07);
+  --line-hi:rgba(255,255,255,0.14);
+  --fg:#eef0f8;
+  --muted:#9096b3;
+  --muted-dim:#666c88;
+  --accent:#6d8bff;
+  --accent-2:#b06dff;
+  --accent-glow:rgba(109,139,255,0.35);
   font-family: -apple-system, "PingFang SC", sans-serif;
 }
+* { box-sizing: border-box; }
 body {
   margin: 0;
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(circle at top, #1b2340, #0a0d1a);
-  color: #eef1ff;
+  background: var(--bg);
+  color: var(--fg);
+  background-image:
+    radial-gradient(900px 500px at 82% -8%, rgba(176,109,255,0.14), transparent 60%),
+    radial-gradient(1000px 560px at 8% -4%, rgba(109,139,255,0.16), transparent 62%);
+  background-attachment: fixed;
+}
+a { color: inherit; text-decoration: none; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+.nav { position: sticky; top: 0; z-index: 20;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(11,13,20,0.72); border-bottom: 1px solid var(--line); }
+.nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+.nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .3px; }
+.nav .brand .dot { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 15px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 16px var(--accent-glow); }
+.nav .links { display: flex; gap: 8px; align-items: center; }
+.nav .links a { padding: 7px 14px; border-radius: 9px; font-size: 13.5px; color: var(--muted); transition: .15s; }
+.nav .links a:hover { color: var(--fg); background: rgba(255,255,255,0.06); }
+
+main.wrap {
+  display: flex; flex-direction: column; align-items: center;
+  min-height: calc(100vh - 60px); justify-content: center; padding: 40px 24px;
 }
 .panel { width: min(420px, 92vw); }
 .panel.hidden { display: none; }
+#auth-title { text-align: center; }
 #auth-form { display: flex; flex-direction: column; gap: 12px; }
 #auth-form input {
-  padding: 10px 14px; border-radius: 10px; border: 1px solid #3a4066;
-  background: #131a33; color: #eef1ff; font-size: 14px;
+  padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-hi);
+  background: var(--card); color: var(--fg); font-size: 14px;
 }
 .auth-actions { display: flex; gap: 10px; }
 .auth-actions button, #chat-form button {
   padding: 10px 16px; border-radius: 10px; border: none; cursor: pointer;
-  background: #5b6bff; color: #fff; font-size: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-size: 14px;
 }
-#register-btn { background: #2a3160; }
+#register-btn { background: var(--card-hi); border: 1px solid var(--line-hi); }
 .error { color: #ff8f9d; font-size: 13px; min-height: 18px; }
 
 #chat-panel { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 #pet-mount { position: relative; width: 260px; height: 260px; }
 #chat-log {
   width: 100%; height: 320px; overflow-y: auto; padding: 12px;
-  background: #10142a; border-radius: 14px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 14px;
+  display: flex; flex-direction: column; gap: 8px;
 }
 .msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.4; }
-.msg.user { align-self: flex-end; background: #5b6bff; color: #fff; }
-.msg.assistant { align-self: flex-start; background: #232a52; }
+.msg.user { align-self: flex-end; background: var(--accent); color: #fff; }
+.msg.assistant { align-self: flex-start; background: var(--card-hi); border: 1px solid var(--line); }
 #chat-form { display: flex; width: 100%; gap: 8px; }
 #chat-input {
-  flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid #3a4066;
-  background: #131a33; color: #eef1ff; font-size: 14px;
+  flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-hi);
+  background: var(--card); color: var(--fg); font-size: 14px;
 }
