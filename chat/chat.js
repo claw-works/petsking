@@ -13,6 +13,9 @@ const chatInput = document.getElementById('chat-input');
 let pet = null;
 let ws = null;
 let assistantBubble = null;
+// 整个页面生命周期内只要成功连过一次，就说明 token 是有效的——
+// 之后哪怕重连一直失败（比如服务器还没重启完），也不该被当成"token 无效"跳登录页。
+let everConnected = false;
 
 function goToLogin() {
   localStorage.removeItem(TOKEN_KEY);
@@ -60,6 +63,10 @@ function connectWs(token) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&pet=${encodeURIComponent(PET_ID)}`);
 
+  ws.addEventListener('open', () => {
+    everConnected = true;
+  });
+
   ws.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data);
     if (msg.type === 'text_delta') {
@@ -77,7 +84,18 @@ function connectWs(token) {
     }
   });
 
-  ws.addEventListener('close', goToLogin);
+  ws.addEventListener('close', () => {
+    assistantBubble = null;
+    if (!everConnected) {
+      // 这个页面从没连上过：token 或 pet 大概率是无效的，回登录页
+      goToLogin();
+      return;
+    }
+    // 曾经连上过：这次只是断线（服务器重启、网络抖动，甚至服务器还没重启完导致的重连失败），
+    // 用同一个 token 一直自动重连，不登出
+    appendMessage('assistant', '（连接断开，正在重连…）');
+    setTimeout(() => connectWs(token), 1500);
+  });
 }
 
 chatForm.addEventListener('submit', (e) => {
