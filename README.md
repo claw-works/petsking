@@ -29,17 +29,21 @@ const pet = await createPet({ pet: 'blue-whale' });   // 一行，桌宠出现�
 ```sh
 git clone git@github.com:claw-works/petsking.git
 cd petsking
-python3 -m http.server 8799
-# 打开 http://localhost:8799/
+bun install
+cp .env.example .env
+# 编辑 .env：JWT_SECRET 填一个随机字符串；AWS_REGION / BEDROCK_MODEL_ID 按你的 AWS 账号调整（只影响陪伴聊天功能）
+bun run server
+# 打开 http://localhost:8787/
 ```
 
-三个页面：
+四个页面：
 
 | 路径 | 说明 |
 |------|------|
 | `/` | 项目介绍页：技术方案总览，链到各文档 |
-| `/dashboard/` | Instance 列表：按渲染方案分组，浏览所有「素材 × 渲染器」组合 |
+| `/dashboard/` | Instance 列表：按渲染方案分组，浏览所有「素材 × 渲染器」组合；webm 宠物卡片上有「互动」入口可以直接聊天 |
 | `/playground/?pet=blue-whale` | 调试台：切驱动/渲染器/朝向、调大小/背景、点动作预览、模拟 Agent 事件 |
+| `/chat/?pet=blue-whale` | 陪伴聊天：邮箱登录后跟宠物角色打字聊天，回复由 Amazon Bedrock 驱动 |
 
 ---
 
@@ -65,24 +69,18 @@ pet.say('搞定啦～');                                          // 冒泡说�
 
 ## 💬 角色培养聊天
 
-一个可跑起来的示例应用：邮箱密码登录后，与桌宠角色（当前仅 `blue-whale`）打字聊天，回复由 Amazon Bedrock（Claude）驱动，并可通过 tool-use 触发桌宠动画；每个用户的对话历史落地 SQLite 持久化。
+`blue-whale`、`残红(canhong)`、`早雾(zaowu)` 三个 webm 宠物支持在 `/chat/?pet=<id>` 打字聊天（也可以从 `/dashboard/` 对应卡片的"互动"链接进入），回复由 Amazon Bedrock（Claude）驱动，可通过 tool-use 触发桌宠动画；每个用户的对话历史按 `(用户, 宠物)` 落地 SQLite 持久化，互不可见。
 
 前置条件：
 
 - 已安装 [Bun](https://bun.sh)
 - 一个具备 Bedrock 访问权限的 AWS 账号，且已在该账号里启用所选模型（默认用跨区域推理配置 ID `us.anthropic.claude-sonnet-4-5-...`）
 
-```sh
-bun install
-cp .env.example .env
-# 编辑 .env：JWT_SECRET 填一个随机字符串；AWS_REGION / BEDROCK_MODEL_ID 按你的 AWS 账号调整
-bun run server
-# 打开 http://localhost:8787/，注册账号即可开始聊天
-```
+只有 `blue-whale` 配了专属人设（`pets/blue-whale/soul.md`）；残红和早雾还没配，聊天时会走一段通用助手兜底文案。
 
-> 当前限定单角色（blue-whale）；登录态 30 天后过期，过期需清浏览器数据重新登录，暂未做应用内自动续期 —— 这是当前 MVP 的已知取舍，不是待修 bug。
+> 登录态 30 天后过期，过期需清浏览器数据重新登录，暂未做应用内自动续期 —— 这是当前 MVP 的已知取舍，不是待修 bug。
 
-设计文档：[character-chat-design.md](docs/superpowers/specs/2026-09-01-character-chat-design.md) · 实施计划：[character-chat.md](docs/superpowers/plans/2026-09-01-character-chat.md)。
+设计文档：[character-chat-design.md](docs/superpowers/specs/2026-09-01-character-chat-design.md)、[dashboard-chat-integration-design.md](docs/superpowers/specs/2026-09-02-dashboard-chat-integration-design.md) · 实施计划：[character-chat.md](docs/superpowers/plans/2026-09-01-character-chat.md)、[dashboard-chat-integration.md](docs/superpowers/plans/2026-09-02-dashboard-chat-integration.md)。
 
 ---
 
