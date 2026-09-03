@@ -3,6 +3,16 @@ import { BedrockRuntimeClient, ConverseStreamCommand } from '@aws-sdk/client-bed
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { buildPerformActionTool } from './intent-tool.js';
 
+function logBedrockError(where, err) {
+  console.error(`[bedrock:${where}]`, {
+    name: err?.name,
+    message: err?.message,
+    httpStatus: err?.$metadata?.httpStatusCode,
+    requestId: err?.$metadata?.requestId,
+    cause: err?.cause,
+  });
+}
+
 export class BedrockProvider {
   constructor({ region, modelId }) {
     // Bun's http2 client hangs indefinitely against the AWS SDK's default
@@ -37,40 +47,54 @@ export class BedrockProvider {
       inferenceConfig: { maxTokens: 1024 },
     });
 
-    const response = await this.client.send(command);
+    let response;
+    try {
+      response = await this.client.send(command);
+    } catch (err) {
+      logBedrockError('client.send', err);
+      throw err;
+    }
     let toolName = null;
     let toolInputJson = '';
 
-    for await (const event of response.stream) {
-      const fault =
-        event.internalServerException ||
-        event.modelStreamErrorException ||
-        event.throttlingException ||
-        event.validationException ||
-        event.serviceUnavailableException;
-      if (fault) throw fault;
-      if (event.contentBlockStart?.start?.toolUse) {
-        toolName = event.contentBlockStart.start.toolUse.name;
-        toolInputJson = '';
-      }
-      if (event.contentBlockDelta?.delta?.text) {
-        yield { type: 'text_delta', delta: event.contentBlockDelta.delta.text };
-      }
-      if (event.contentBlockDelta?.delta?.toolUse?.input) {
-        toolInputJson += event.contentBlockDelta.delta.toolUse.input;
-      }
-      if (event.contentBlockStop && toolName) {
-        try {
-          const input = JSON.parse(toolInputJson || '{}');
-          yield { type: 'tool_call', name: toolName, input };
-        } catch (err) {
-          console.warn('perform_action 工具参数不是合法 JSON，忽略这次调用:', toolInputJson, err);
+    try {
+      for await (const event of response.stream) {
+        const fault =
+          event.internalServerException ||
+          event.modelStreamErrorException ||
+          event.throttlingException ||
+          event.validationException ||
+          event.serviceUnavailableException;
+        if (fault) {
+          logBedrockError('stream fault event', fault);
+          throw fault;
         }
-        toolName = null;
+        if (event.contentBlockStart?.start?.toolUse) {
+          toolName = event.contentBlockStart.start.toolUse.name;
+          toolInputJson = '';
+        }
+        if (event.contentBlockDelta?.delta?.text) {
+          yield { type: 'text_delta', delta: event.contentBlockDelta.delta.text };
+        }
+        if (event.contentBlockDelta?.delta?.toolUse?.input) {
+          toolInputJson += event.contentBlockDelta.delta.toolUse.input;
+        }
+        if (event.contentBlockStop && toolName) {
+          try {
+            const input = JSON.parse(toolInputJson || '{}');
+            yield { type: 'tool_call', name: toolName, input };
+          } catch (err) {
+            console.warn('perform_action 工具参数不是合法 JSON，忽略这次调用:', toolInputJson, err);
+          }
+          toolName = null;
+        }
+        if (event.messageStop) {
+          yield { type: 'done' };
+        }
       }
-      if (event.messageStop) {
-        yield { type: 'done' };
-      }
+    } catch (err) {
+      logBedrockError('stream iteration', err);
+      throw err;
     }
   }
 }

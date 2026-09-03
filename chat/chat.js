@@ -91,6 +91,9 @@ function connectWs(token) {
     } else if (msg.type === 'action') {
       if (pet && pet.bridge) pet.bridge.reactTo(msg.intent);
     } else if (msg.type === 'done') {
+      // 模型有时只触发动作、不带文字回复；这种情况下 text_delta 从没来过，
+      // assistantBubble 还是 null，得补一条提示，否则聊天记录里像是完全没反应。
+      if (!assistantBubble) assistantBubble = appendMessage('assistant', '（只是动了一下，没说话）');
       if (assistantBubble && pet) pet.say(assistantBubble.textContent, 4000);
       assistantBubble = null;
     } else if (msg.type === 'error') {

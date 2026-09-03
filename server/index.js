@@ -138,6 +138,7 @@ Bun.serve({
           ws.send(JSON.stringify(event));
         }
       } catch (e) {
+        console.error('[ws turn failed]', { userId: ws.data.userId, petId: ws.data.petId, name: e?.name, message: e?.message });
         ws.send(JSON.stringify({ type: 'error', message: e.message }));
       } finally {
         ws.data.turnInFlight = false;
