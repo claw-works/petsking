@@ -34,9 +34,16 @@ export class BedrockProvider {
       // Task 15 manual verification — it broke the very next turn with
       // "text content blocks must be non-empty" otherwise). Fall back to a small
       // non-empty placeholder so history replay stays valid.
+      //
+      // The placeholder must not look like something the model would say itself —
+      // an earlier version used a bare "..." and the model started imitating its
+      // own replayed history, degenerating into replying "..." every turn. Using
+      // an asterisked stage-direction note instead reads as narration, not dialogue,
+      // and content that's itself just dots/punctuation is treated as empty too so
+      // a "..." that slipped through before this fix doesn't keep reinforcing itself.
       messages: messages.map((m) => ({
         role: m.role,
-        content: [{ text: m.content && m.content.trim() ? m.content : '...' }],
+        content: [{ text: m.content && /[^\s.]/.test(m.content) ? m.content : '*没有说话，只是做了个动作*' }],
       })),
       toolConfig: { tools: [buildPerformActionTool(intents)] },
       // Without an explicit cap, Bedrock can default maxTokens to the model's

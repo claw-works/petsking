@@ -43,7 +43,9 @@ async function loadHistory(token) {
     if (!res.ok) return;
     const { messages } = await res.json();
     for (const m of messages) {
-      if (m.role === 'user' || m.role === 'assistant') appendMessage(m.role, m.content);
+      if (m.role !== 'user' && m.role !== 'assistant') continue;
+      const text = m.content && m.content.trim() ? m.content : '（只是动了一下，没说话）';
+      appendMessage(m.role, text);
     }
   } catch {
     // 拉历史失败不影响继续聊天，就当没有历史

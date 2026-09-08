@@ -13,7 +13,7 @@ export function formatElapsed(ms) {
 export function buildSystemPrompt({ soul, intents, lastMessageAt, now = Date.now() }) {
   const parts = [soul.trim()];
   parts.push(
-    `你可以在合适的时候调用 perform_action 工具触发一个动作反应，intent 从这些里选：${intents.join(' / ')}。不要每句话都调用，只在情绪明显变化时用。无论是否调用这个工具，每次回复都必须说一点话，不能只调用工具而不说任何文字。`
+    `你可以在合适的时候调用 perform_action 工具触发一个动作反应，intent 从这些里选：${intents.join(' / ')}。不要每句话都调用，只在情绪明显变化时用。无论是否调用这个工具，每次回复都必须说一点实际的话，不能只调用工具而不说任何文字，也不能用"..."、"。"之类的省略号/标点敷衍了事。`
   );
   if (lastMessageAt != null) {
     const gap = formatElapsed(now - lastMessageAt);
