@@ -7,13 +7,13 @@ const PETS_BASE = '../pets/';
 
 // 渲染方案分组元信息（顺序即展示顺序）
 const RENDERER_GROUPS = {
+  gltf:        { icon: '🧍', name: 'GLTF 3D 角色' },
   webm:        { icon: '🎬', name: 'WebM 透明视频' },
   gif:         { icon: '🎞️', name: 'GIF' },
   spritesheet: { icon: '🧩', name: 'Sprite Sheet 逐帧' },
   pixel:       { icon: '🎨', name: '像素 Canvas' },
   svg:         { icon: '🦴', name: 'SVG 矢量骨骼' },
   three:       { icon: '🧊', name: 'Three.js 3D' },
-  gltf:        { icon: '🧍', name: 'GLTF 3D 角色' },
 };
 
 async function main() {
