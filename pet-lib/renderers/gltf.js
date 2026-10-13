@@ -7,7 +7,7 @@
 //   shadow       false 关掉脚下软阴影
 //   expressions / blush / fur / springBones / gestureBones   见 _gltf-character.js / _gltf-gestures.js
 //   actions[动作] = "ClipName" | { clip, once?, yaw?, speed?, speedScale? }
-//     once   只播一遍，播完淡回待机 clip（idle 动作 → idleActions[0] → actions 里第一个非 once 动作）
+//     once   只播一遍，播完淡回待机 clip（idle 动作 → actions 里第一个非 once 且 clip 存在的动作）
 //     yaw    播这个动作时身体朝向（度，正 = 朝屏幕右）；不写则跟随 setFacing
 //     speed  clip 的真实行进速度 m/s（走动平移按它换算像素速度，脚不打滑）
 // three 与 GLTFLoader 通过页面 importmap（'three'、'three/addons/'）或打包器解析；全部动态 import。
@@ -148,17 +148,17 @@ export class GltfRenderer extends RendererBase {
     return typeof v === 'string' ? { clip: v } : v;
   }
 
-  /** 待机动作 spec（附带 action 名）：idle → idleActions[0] → actions 里第一个非 once 动作；都没有返回 null */
+  /**
+   * 待机动作 spec（附带 action 名）：候选依次为 idle 动作、actions 里的每个动作（按声明顺序）；
+   * 跳过 once 型和 clip 不在模型里的候选，返回第一个有效的；都没有返回 null
+   */
   _idleSpec() {
-    const list = this.assets.idleActions;
-    const names = ['idle', ...(Array.isArray(list) && list.length ? [list[0]] : [])];
+    const names = ['idle', ...Object.keys(this.assets.actions || {})];
     for (const name of names) {
       const s = this._spec(name);
-      if (s) return { ...s, action: name };
-    }
-    for (const name of Object.keys(this.assets.actions || {})) {
-      const s = this._spec(name);
-      if (s && !s.once) return { ...s, action: name };
+      if (!s || s.once) continue;
+      if (!this.character || !this.character.actions[s.clip]) continue;
+      return { ...s, action: name };
     }
     return null;
   }
@@ -223,6 +223,7 @@ export class GltfRenderer extends RendererBase {
   _loop() {
     const dt = Math.min(this._clock.getDelta(), 0.1);
     this.character.update(dt);
+    if (this._destroyed) return; // update 回调（如一次型播完）里可能已销毁
     this.webgl.render(this.scene, this.camera);
     this._raf = requestAnimationFrame(this._loop);
   }

@@ -69,9 +69,8 @@ export class GestureLayer {
       _dw.copy(_r).multiply(_d).multiply(_rInv);       // → 世界坐标系
       bone.getWorldQuaternion(_w);                     // 内部会刷新父链 matrixWorld
       bone.parent.getWorldQuaternion(_p);
-      let saved = this._saved.get(bone);
-      if (!saved) this._saved.set(bone, (saved = new THREE.Quaternion()));
-      saved.copy(bone.quaternion);
+      // 两个槽映射到同一骨骼时只保存第一次（叠加前的原始姿势），否则 restore 会还原成已偏移的值
+      if (!this._saved.has(bone)) this._saved.set(bone, bone.quaternion.clone());
       _w.premultiply(_dw);                             // 新世界姿态 = 偏移 × 原世界姿态
       bone.quaternion.copy(_p.invert().multiply(_w));  // 换回局部
     }
