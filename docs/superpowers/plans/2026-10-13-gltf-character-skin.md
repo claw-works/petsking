@@ -1708,7 +1708,8 @@ export class GltfRenderer extends RendererBase {
     const root = this.character.root;
     this.character.update(0);
     root.updateMatrixWorld(true);
-    const size = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
     const headBone = root.getObjectByName((this.assets.gestureBones && this.assets.gestureBones.head) || 'Bip001Head');
     const headY = headBone ? headBone.getWorldPosition(new THREE.Vector3()).y : null;
     const cam = this.assets.camera;
@@ -1717,7 +1718,7 @@ export class GltfRenderer extends RendererBase {
       const [px, py, pz] = cam.position, [tx, ty, tz] = cam.target;
       f = { position: cam.position, target: cam.target, fov: cam.fov ?? 30, distance: Math.hypot(px - tx, py - ty, pz - tz) };
     } else {
-      f = this._math.frameCamera({ mode: cam || 'full', height: size.y || 1.7, headY, fovDeg: 30 });
+      f = this._math.frameCamera({ mode: cam || 'full', minY: box.min.y, height: size.y || 1.7, headY, fovDeg: 30 });
     }
     this.camera.fov = f.fov;
     this.camera.position.set(...f.position);
