@@ -34,8 +34,10 @@ export const DEFAULT_CONFIG = {
 // pet.json 顶层 → assets 的透传字段（assets 里已有同名字段时不覆盖）
 //   位图 / 像素 / svg：geometry grid sheet palette frames colors frameMs fps aspect
 //   three / gltf：model autoSpin camera turnDeg shadow expressions blush fur springBones gestureBones
+//   gltf 模型修正 / 口型：scale stripRootMotion rootBone materialFixes blinkMorph visemes mouthMap（见 renderers/gltf.js）
 const PASS_KEYS = ['geometry', 'grid', 'sheet', 'palette', 'frames', 'colors', 'model', 'frameMs', 'autoSpin', 'fps',
-  'camera', 'turnDeg', 'shadow', 'expressions', 'blush', 'fur', 'springBones', 'gestureBones', 'aspect'];
+  'camera', 'turnDeg', 'shadow', 'expressions', 'blush', 'fur', 'springBones', 'gestureBones', 'aspect',
+  'scale', 'stripRootMotion', 'rootBone', 'materialFixes', 'blinkMorph', 'visemes', 'mouthMap'];
 
 /** 内置场景预设：布局与交互 */
 export const SCENES = {

@@ -1,6 +1,6 @@
 // pet-lib/renderers/gltf-math.test.js
 import { test, expect } from 'bun:test';
-import { frameCamera, pxPerMeter, walkSpeedPx } from './gltf-math.js';
+import { frameCamera, pxPerMeter, walkSpeedPx, mouthTargets, DEFAULT_MOUTH_MAP } from './gltf-math.js';
 
 test('full：以身高中点为目标，留 12% 余量装下全身', () => {
   const f = frameCamera({ mode: 'full', height: 1.7, fovDeg: 30 });
@@ -46,4 +46,23 @@ test('walkSpeedPx：只取屏幕水平分量（sin yaw）× scale', () => {
   expect(walkSpeedPx({ ...base, yawDeg: -70 })).toBeCloseTo(ppm * Math.sin(70 * Math.PI / 180), 5);
   expect(walkSpeedPx({ ...base, yawDeg: 0 })).toBeCloseTo(0, 5);
   expect(walkSpeedPx({ ...base, yawDeg: 90, scale: 0.5 })).toBeCloseTo(ppm / 2, 5);
+});
+
+test('mouthTargets：默认映射与旧的硬编码公式一致', () => {
+  const f = { open: 0.6, wide: 0.3, round: 0.2 };
+  const a = Math.max(0, 1 - f.wide - f.round);
+  const t = mouthTargets(f);
+  expect(t.Aa).toBeCloseTo(f.open * a * 0.8, 6);
+  expect(t.I).toBeCloseTo(f.open * f.wide * 0.75, 6);
+  expect(t.E).toBeCloseTo(f.open * f.wide * 0.3, 6);
+  expect(t.O).toBeCloseTo(f.open * f.round * 0.8, 6);
+  expect(t.U).toBeCloseTo(f.open * f.round * 0.35, 6);
+  expect(t.M_OpenSmall).toBeCloseTo(f.open * 0.25, 6);
+  expect(Object.keys(t).sort()).toEqual(Object.keys(DEFAULT_MOUTH_MAP).sort());
+});
+
+test('mouthTargets：自定义映射可组合多个特征', () => {
+  const t = mouthTargets({ open: 0.5, wide: 0.4, round: 0 }, { jawOpen: { open: 1 }, mouthWide: { wide: 1, a: 0.5 } });
+  expect(t.jawOpen).toBeCloseTo(0.5, 6);
+  expect(t.mouthWide).toBeCloseTo(0.5 * (0.4 + 0.6 * 0.5), 6);
 });

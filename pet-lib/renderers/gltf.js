@@ -6,6 +6,19 @@
 //   turnDeg      setFacing 左/右时身体转多少度（默认 70）
 //   shadow       false 关掉脚下软阴影
 //   expressions / blush / fur / springBones / gestureBones   见 _gltf-character.js / _gltf-gestures.js
+//     blush.material   画腮红的材质名正则（默认 'Face'）
+//   模型修正开关（通用默认全关；清霄这类 Kuro 导出模型在 pet.json 里打开，模型侧修好后可关掉，
+//   见 docs/model-change-requests.md）：
+//     scale            模型整体缩放（默认 1；以 cm 制作的模型写 0.01）
+//     stripRootMotion  true = 去掉根骨骼位移轨道 `<rootBone>.position`（默认 false）
+//     rootBone         根骨骼名（默认 'Root'）
+//     materialFixes    材质修正预设（默认 null）；"kuro" = 头发/刘海镂空、身体/衣服/脸/眼强制不透明
+//   口型 / 眨眼（不同模型的 morph 命名不同）：
+//     blinkMorph       眨眼 morph 名（默认 'E_Close'；模型没有就不眨眼）
+//     visemes          按字估算口型表 { A:{morph:权重}, …, rest:{} }，按 viseme 名合并覆盖 voice/visemes.js 的 VISEMES
+//     mouthMap         音频口型特征 → morph：{ morph: { 特征: 系数 } }，权重 = open × Σ(特征 × 系数)；
+//                      特征 a(=1-wide-round) / wide / round / open(=1)。默认
+//                      { Aa:{a:0.8}, I:{wide:0.75}, E:{wide:0.3}, O:{round:0.8}, U:{round:0.35}, M_OpenSmall:{open:0.25} }
 //   actions[动作] = "ClipName" | { clip, once?, yaw?, speed?, speedScale? }
 //     once   只播一遍，播完淡回待机 clip（idle 动作 → actions 里第一个非 once 且 clip 存在的动作）
 //     yaw    播这个动作时身体朝向（度，正 = 朝屏幕右）；不写则跟随 setFacing
@@ -44,7 +57,11 @@ export class GltfRenderer extends RendererBase {
     if (this._destroyed) { disposeObject(gltf.scene); this.destroy(); return; }
 
     const a = this.assets;
-    this.character = new Character(gltf, { expressions: a.expressions, blush: a.blush, fur: a.fur, springBones: a.springBones });
+    this.character = new Character(gltf, {
+      expressions: a.expressions, blush: a.blush, fur: a.fur, springBones: a.springBones,
+      scale: a.scale, stripRootMotion: a.stripRootMotion, rootBone: a.rootBone, materialFixes: a.materialFixes,
+      blinkMorph: a.blinkMorph, visemes: a.visemes, mouthMap: a.mouthMap,
+    });
     this.gestures = new GestureLayer(this.character.root, a.gestureBones);
     this.character.gestureLayer = this.gestures;
     this.character.onOnceEnd = () => this._onOnceEnd();
@@ -99,11 +116,12 @@ export class GltfRenderer extends RendererBase {
     this.scene.add(new THREE.HemisphereLight(0x8899bb, 0x223344, 0.75));
 
     if (this.assets.shadow !== false) {
-      const ground = new THREE.Mesh(new THREE.CircleGeometry(0.9, 48), new THREE.ShadowMaterial({ opacity: 0.25 }));
+      // 单位半径，_frame() 里按模型高度缩放
+      const ground = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.ShadowMaterial({ opacity: 0.25 }));
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
       this.scene.add(ground);
-      this._ground = ground; // 高度在 _frame() 里对齐到脚底
+      this._ground = ground; // 高度 / 半径在 _frame() 里对齐到脚底、按身高缩放
     }
 
     // 容器尺寸变化（playground setSize、窗口缩放）
@@ -124,7 +142,10 @@ export class GltfRenderer extends RendererBase {
     root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root);
     const size = box.getSize(new THREE.Vector3());
-    if (this._ground && isFinite(box.min.y)) this._ground.position.y = box.min.y;
+    if (this._ground && isFinite(box.min.y)) {
+      this._ground.position.y = box.min.y;
+      this._ground.scale.setScalar(0.55 * (size.y || 1.7));   // 阴影半径随模型身高（清霄约 1.72m → 0.95）
+    }
     const headBone = root.getObjectByName((this.assets.gestureBones && this.assets.gestureBones.head) || 'Bip001Head');
     const headY = headBone ? headBone.getWorldPosition(new THREE.Vector3()).y : null;
     const cam = this.assets.camera;

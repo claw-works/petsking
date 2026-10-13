@@ -58,3 +58,16 @@ test('aspect 透传到 assets', async () => {
   const pack = await loadAssetPack({ id: 'x', aspect: 0.5, actions: {} });
   expect(pack.assets.aspect).toBe(0.5);
 });
+
+test('gltf 模型修正 / 口型字段透传到 assets', async () => {
+  const mouthMap = { jaw: { open: 1 } };
+  const visemes = { A: { jaw: 1 } };
+  const pack = await loadAssetPack({
+    id: 'x', renderer: 'gltf', scale: 0.01, stripRootMotion: true, rootBone: 'Hips',
+    materialFixes: 'kuro', blinkMorph: 'Blink', visemes, mouthMap,
+  });
+  expect(pack.assets).toMatchObject({ scale: 0.01, stripRootMotion: true, rootBone: 'Hips', materialFixes: 'kuro', blinkMorph: 'Blink', visemes, mouthMap });
+  const plain = await loadAssetPack({ id: 'y', renderer: 'gltf' });
+  expect(plain.assets.scale).toBeUndefined();
+  expect(plain.assets.materialFixes).toBeUndefined();
+});

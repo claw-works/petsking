@@ -12,6 +12,11 @@
   "camera": "full",
   "aspect": 0.6,
   "turnDeg": 70,
+  "scale": 0.01,
+  "stripRootMotion": true,
+  "rootBone": "Root",
+  "materialFixes": "kuro",
+  "blinkMorph": "E_Close",
   "actions": {
     "idle": "Stand2",
     "fidget-1": { "clip": "Stand1_Action01", "once": true },

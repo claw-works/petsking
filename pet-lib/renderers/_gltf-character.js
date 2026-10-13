@@ -4,9 +4,12 @@
 //   - 不含语音（由 pet-lib/voice 负责，口型经 setMouth 推进来）
 //   - 不含 idle director 与根位移（待机小动作由 pet-lib 驱动调度，桌宠原地走）
 //   - 表情预设可被素材包 expressions 覆盖
+//   - 清霄（Kuro 导出）模型专属的修正改为可配置，通用默认全关（见 gltf.js 头注释与 docs/model-change-requests.md）：
+//     scale / stripRootMotion + rootBone / materialFixes / blinkMorph / visemes / mouthMap / blush.material
 import * as THREE from 'three';
 import { SpringBones } from './_springbones.js';
 import { VISEMES } from '../voice/visemes.js';
+import { DEFAULT_MOUTH_MAP, mouthTargets } from './gltf-math.js';
 
 // 清霄脸部 morph：B_* 眉、E_* 眼（E_Smile_L/R = 单眼笑眯）、M_* 嘴；L/R 为角色自身左右。
 // blush 驱动脸部 shader 的腮红（0..1）。
@@ -21,53 +24,76 @@ export const DEFAULT_EXPRESSIONS = {
   surprised: { label: '惊讶', morphs: { B_Happy: 0.7, E_Stare: 0.9, M_O: 0.75 } },
 };
 
+// 说话时要压低的「表情嘴部」morph（另外 visemes / mouthMap 里出现的 morph 也算嘴部）
 const MOUTH_RE = /^(M_|Aa$|A$|E$|I$|O$|U$)/;
 
-// 材质修正：GLB 的 alphaMode 与贴图 alpha 实际含义不符（见 docs/model-change-requests.md #1 #2）
-function fixMaterials(root) {
+// Kuro（清霄）材质修正：GLB 的 alphaMode 与贴图 alpha 实际含义不符（见 docs/model-change-requests.md #1 #2）。
+// 材质名形如 MI_R2T1QingxiaoMd10011Bangs / …Hair / …Face / …Up / …Down / …Cloth / …Eye / …Alpha：
+//   Bangs / Hair → 镂空（alpha-test + 双面）；Up / Cloth / Down / Face / Eye → 强制不透明；其余（如 Alpha）不动。
+const KURO_CUTOUT_RE = /(^|_|Md\d+)(Bangs|Hair)$/;
+const KURO_OPAQUE_RE = /(^|_|Md\d+)(Up|Cloth|Down|Face)$|Eye$/;
+function fixKuroMaterial(o, m) {
+  const n = m.name || '';
+  if (KURO_CUTOUT_RE.test(n)) {
+    // 头发 / 刘海：alpha 是真实镂空，alpha-test + 双面
+    m.alphaTest = 0.35;
+    m.depthWrite = true;
+    m.side = THREE.DoubleSide;
+    m.transparent = false;
+  } else if (KURO_OPAQUE_RE.test(n)) {
+    // 身体 / 衣服 / 脸 / 眼：base color alpha 是无意义低值，强制不透明，否则会挖洞露出黑色背面
+    m.alphaTest = 0;
+    m.transparent = false;
+    m.depthWrite = true;
+    m.side = THREE.FrontSide;
+    m.opacity = 1;
+    if (m.alphaMap) m.alphaMap = null;
+    o.castShadow = false; // 避免胸口 / 领口自阴影黑斑
+  }
+}
+
+// materialFixes 取值 → 单个材质的修正函数
+const MATERIAL_FIXES = { kuro: fixKuroMaterial };
+
+/** 所有网格投影、不做视锥剔除（蒙皮网格包围盒不跟骨骼走）；按 materialFixes 套用材质修正 */
+function prepareMeshes(root, materialFixes) {
+  const fix = materialFixes ? MATERIAL_FIXES[materialFixes] : null;
+  if (materialFixes && !fix) console.warn('[gltf] unknown materialFixes:', materialFixes);
   root.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;
     o.frustumCulled = false;
-    const m = o.material;
-    if (!m) return;
-    const n = m.name || '';
-    if (/Bangs|Hair/.test(n)) {
-      // 头发 / 刘海：alpha 是真实镂空，alpha-test + 双面
-      m.alphaTest = 0.35;
-      m.depthWrite = true;
-      m.side = THREE.DoubleSide;
-      m.transparent = false;
-    } else if (/Up|Cloth|Down|Eye$|Face/.test(n) || m.alphaMode === 'OPAQUE') {
-      // 身体 / 衣服 / 脸 / 眼：base color alpha 是无意义低值，强制不透明，否则会挖洞露出黑色背面
-      m.alphaTest = 0;
-      m.transparent = false;
-      m.depthWrite = true;
-      m.side = THREE.FrontSide;
-      m.opacity = 1;
-      if (m.alphaMap) m.alphaMap = null;
-      o.castShadow = false; // 避免胸口 / 领口自阴影黑斑
-    }
+    if (fix && o.material) fix(o, o.material);
   });
 }
 
 export class Character {
   /**
    * @param gltf  GLTFLoader 结果
-   * @param opts  { expressions?, blush?, fur?, springBones?, scale? }
+   * @param opts  {
+   *   expressions?, blush?, fur?, springBones?,
+   *   scale?            模型整体缩放（默认 1；清霄以 cm 制作用 0.01，见 model-change-requests #4）
+   *   stripRootMotion?  去掉 `<rootBone>.position` 轨道（默认 false；见 #3）
+   *   rootBone?         根骨骼名（默认 'Root'）
+   *   materialFixes?    材质修正预设（默认 null；'kuro' = 清霄，见 #1 #2）
+   *   blinkMorph?       眨眼 morph 名（默认 'E_Close'；模型没有该 morph 就不眨眼）
+   *   visemes?          口型表覆盖（按 viseme 名合并到 voice/visemes.js 的 VISEMES）
+   *   mouthMap?         音频口型特征 → morph 映射（默认 DEFAULT_MOUTH_MAP）
+   * }
    */
   constructor(gltf, opts = {}) {
     this.root = gltf.scene;
-    fixMaterials(this.root);
-    this.root.scale.setScalar(opts.scale ?? 0.01); // 模型以 cm 制作（见 model-change-requests #4）
+    prepareMeshes(this.root, opts.materialFixes || null);
+    this.root.scale.setScalar(opts.scale ?? 1);
 
     this.springs = new SpringBones(this.root, opts.springBones);
 
     this.mixer = new THREE.AnimationMixer(this.root);
     this.actions = {};
+    const rootTrack = (opts.rootBone || 'Root') + '.position';
     for (const clip of gltf.animations) {
-      // Root 骨骼位移轨道会在循环边界跳变，去掉（见 model-change-requests #3）
-      clip.tracks = clip.tracks.filter((t) => !/^Root\.position$/.test(t.name));
+      // 根骨骼位移轨道会在循环边界跳变，可按需去掉（桌宠原地走，平移由容器负责）
+      if (opts.stripRootMotion) clip.tracks = clip.tracks.filter((t) => t.name !== rootTrack);
       this.actions[clip.name] = this.mixer.clipAction(clip);
     }
     this.clipNames = Object.keys(this.actions);
@@ -95,6 +121,14 @@ export class Character {
     this.expression = 'neutral';
     this._exprNoBlink = false;
     this._mouth = null;
+    this.blinkMorph = opts.blinkMorph || 'E_Close';
+    this.visemes = { ...VISEMES, ...(opts.visemes || {}) };
+    this.mouthMap = opts.mouthMap || DEFAULT_MOUTH_MAP;
+    // 嘴部 morph：默认前缀规则 + 口型表 / mouthMap 里出现的 morph
+    this._mouthNames = new Set([
+      ...Object.values(this.visemes).flatMap((v) => Object.keys(v || {})),
+      ...Object.keys(this.mouthMap),
+    ]);
     this._setupBlush(opts.blush);
     this._setupFur(opts.fur);
 
@@ -131,7 +165,7 @@ export class Character {
     this._blushTarget = p.blush || 0;
     // 预设本身已经（半）闭眼时，再叠眨眼会很怪
     const m = p.morphs;
-    this._exprNoBlink = Math.max(m.E_Close || 0, m.E_Smile_L || 0, m.E_Smile_R || 0) >= 0.5;
+    this._exprNoBlink = Math.max(m[this.blinkMorph] || 0, m.E_Smile_L || 0, m.E_Smile_R || 0) >= 0.5;
   }
 
   /** 口型帧：{ open, wide, round } | { viseme } | null */
@@ -160,7 +194,7 @@ export class Character {
     });
   }
 
-  // 脸部 shader 画腮红（模型没有 blush morph）。cfg: { uv:[[u,v],[u,v]], radius:[rx,ry], color }
+  // 脸部 shader 画腮红（模型没有 blush morph）。cfg: { material:'Face'(材质名正则), uv:[[u,v],[u,v]], radius:[rx,ry], color }
   _setupBlush(cfg = {}) {
     this._blush = { value: 0 };
     this._blushTarget = 0;
@@ -168,8 +202,9 @@ export class Character {
     const [rx, ry] = cfg.radius || [0.085, 0.045];
     const col = new THREE.Color(cfg.color || '#ff6f7d');
     const glsl = (v) => v.toFixed(4);
+    const matRe = new RegExp(cfg.material || 'Face');
     this.root.traverse((o) => {
-      if (!o.isMesh || !/Face/.test(o.material?.name || '') || !o.material.map) return;
+      if (!o.isMesh || !matRe.test(o.material?.name || '') || !o.material.map) return;
       const m = o.material;
       m.onBeforeCompile = (sh) => {
         sh.uniforms.uBlush = this._blush;
@@ -201,18 +236,17 @@ export class Character {
   // 口型叠在表情上：说话时把表情的嘴部 morph 压到 30%，让口型看得清
   _updateFace(dt) {
     const f = this._mouth;
-    let target = VISEMES.rest;
+    const rest = this.visemes.rest || {};
+    let target = rest;
     if (f && f.viseme) {
-      target = VISEMES[f.viseme] || VISEMES.rest;
+      target = this.visemes[f.viseme] || rest;
     } else if (f && f.open != null) {
-      const o = f.open;
-      const a = Math.max(0, 1 - f.wide - f.round);
-      target = { Aa: o * a * 0.8, I: o * f.wide * 0.75, E: o * f.wide * 0.3, O: o * f.round * 0.8, U: o * f.round * 0.35, M_OpenSmall: o * 0.25 };
+      target = mouthTargets(f, this.mouthMap);
     }
     const talking = !!f;
     for (const name of Object.keys(this.morphs)) {
       let base = this.morphValues[name] || 0;
-      const isMouth = MOUTH_RE.test(name);
+      const isMouth = MOUTH_RE.test(name) || this._mouthNames.has(name);
       if (talking && isMouth) base *= 0.3;
       const sp = target[name] || 0;
       const goal = Math.max(base, sp);
@@ -230,7 +264,8 @@ export class Character {
 
   _updateBlink(dt) {
     if (!this.autoBlink || this._exprNoBlink) return;
-    if (this.morphs.E_Close === undefined) return;
+    const bm = this.blinkMorph;
+    if (this.morphs[bm] === undefined) return;
     this._blinkTimer -= dt;
     if (this._blinkPhase < 0 && this._blinkTimer <= 0) this._blinkPhase = 0;
     if (this._blinkPhase < 0) return;
@@ -240,9 +275,9 @@ export class Character {
     if (p < 0.5) w = p * 2;
     else if (p < 1) w = (1 - p) * 2;
     else { this._blinkPhase = -1; this._blinkTimer = 1.8 + Math.random() * 3.5; }
-    const base = this.morphCurrent.E_Close || 0;
+    const base = this.morphCurrent[bm] || 0;
     for (const mesh of this.morphMeshes) {
-      const mi = mesh.morphTargetDictionary.E_Close;
+      const mi = mesh.morphTargetDictionary[bm];
       if (mi !== undefined) mesh.morphTargetInfluences[mi] = Math.max(base, w);
     }
   }
