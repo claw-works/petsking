@@ -58,7 +58,10 @@
   #log div:first-child{color:#d7ffdb;}
 </style>
 <script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
 </script>
 </head>
 <body>
@@ -180,6 +183,18 @@
       </div>
     </div>
     <div class="section" id="emote-section" style="display:none"><h2>表情特写（半身弹层）</h2><div class="ai-row" id="emote-row"></div><div style="font-size:11px;color:#8a90ad;margin-top:6px">在本体上方弹半身近景播表情，播完自动消失，不影响本体。</div></div>
+    <div class="section" id="expr-section" style="display:none"><h2>表情</h2><div class="ai-row" id="expr-row"></div></div>
+    <div class="section" id="gesture-section" style="display:none"><h2>头部小动作</h2><div class="ai-row" id="gesture-row"></div></div>
+    <div class="section" id="voice-section" style="display:none"><h2>语音台词</h2><div class="ai-row" id="voice-row"></div></div>
+    <div class="section">
+      <h2>说话（任意文字 · TTS）</h2>
+      <div style="display:flex;gap:8px">
+        <input id="speak-input" type="text" value="你好，我是你的桌面小伙伴。"
+          style="flex:1;background:#12141f;border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e8eaf2;padding:8px 10px;font-size:12px" />
+        <button id="speak-btn">说</button><button id="speak-stop">停</button>
+      </div>
+      <div style="font-size:11px;color:#8a90ad;margin-top:6px">默认浏览器 TTS（按字估算口型）；宿主可注入返回音频的 provider，口型改由音频驱动。首次出声前需要点一下页面。</div>
+    </div>
     <div class="section"><h2>意图/情绪表演</h2><div class="ai-row" id="intent-row"></div></div>
     <div class="section"><h2>事件日志</h2><div id="log"></div></div>
   </aside>

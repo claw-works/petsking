@@ -776,9 +776,11 @@ git commit -m "feat(voice): 语音包加载与台词 URL 解析"
 ```js
 // pet-lib/voice/tts.js — TTS provider 接口 + 默认实现
 //
-// provider 签名：(text, { lang }) => Promise<Blob | ArrayBuffer | string(url) | null>
-//   返回音频 → Voice 用 lipsync 播放并按音频驱动口型（推荐：云 TTS、克隆音色）
-//   返回 null → provider 已经自己出声（如浏览器 TTS），Voice 按字估算口型
+// provider 签名：(text, { lang }) => Promise<结果>，结果三选一：
+//   (a) 音频：Blob | ArrayBuffer | TypedArray | string(url) → Voice 用 lipsync 播放并按音频驱动口型（推荐：云 TTS、克隆音色）
+//   (b) { done: Promise, cancel?: () => void } → provider 已经自己出声（如浏览器 TTS），Voice 按字估算口型，
+//       done 落定才结束，被打断时调 cancel()
+//   (c) null → 没有可用的发声手段，Voice 返回 { played: false, reason: 'no-tts' }
 // 宿主项目通过 createPet({ voice: { tts: myProvider } }) 注入，库不绑任何厂商。
 
 export async function browserTts(text, { lang = 'zh-CN', rate = 1.05 } = {}) {
@@ -788,7 +790,7 @@ export async function browserTts(text, { lang = 'zh-CN', rate = 1.05 } = {}) {
   u.rate = rate;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
-  return null;
+  return { done: new Promise(() => {}), cancel: () => speechSynthesis.cancel() };   // 实际实现见 tts.js（onend/onerror 驱动 done）
 }
 
 export function cancelBrowserTts() {
@@ -804,7 +806,7 @@ export function cancelBrowserTts() {
 //   playAudio(src)   播音频（URL/Blob/ArrayBuffer），音频驱动口型
 //   speakText(text)  调 TTS provider：拿到音频走 playAudio；provider 自己出声则按字估算口型
 //   stop()
-// 返回值统一 { played: bool, reason?: 'locked'|'error'|'tts-error'|'empty', interrupted?: bool }
+// 返回值统一 { played: bool, reason?: 'locked'|'error'|'tts-error'|'no-tts'|'no-src'|'empty', interrupted?: bool }
 import { AudioLipSync } from './lipsync.js';
 import { textToVisemeTimeline, visemeAt } from './visemes.js';
 import { browserTts, cancelBrowserTts } from './tts.js';
@@ -1706,7 +1708,8 @@ export class GltfRenderer extends RendererBase {
     const root = this.character.root;
     this.character.update(0);
     root.updateMatrixWorld(true);
-    const size = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
     const headBone = root.getObjectByName((this.assets.gestureBones && this.assets.gestureBones.head) || 'Bip001Head');
     const headY = headBone ? headBone.getWorldPosition(new THREE.Vector3()).y : null;
     const cam = this.assets.camera;
@@ -1715,7 +1718,7 @@ export class GltfRenderer extends RendererBase {
       const [px, py, pz] = cam.position, [tx, ty, tz] = cam.target;
       f = { position: cam.position, target: cam.target, fov: cam.fov ?? 30, distance: Math.hypot(px - tx, py - ty, pz - tz) };
     } else {
-      f = this._math.frameCamera({ mode: cam || 'full', height: size.y || 1.7, headY, fovDeg: 30 });
+      f = this._math.frameCamera({ mode: cam || 'full', minY: box.min.y, height: size.y || 1.7, headY, fovDeg: 30 });
     }
     this.camera.fov = f.fov;
     this.camera.position.set(...f.position);
@@ -2717,7 +2720,7 @@ import { Voice, browserTts } from '@claw-works/pet-lib/voice';
 
 ```markdown
 | `voice.enabled` | bool | `true` | `false` 时 `voice()/speak()` 只冒泡 |
-| `voice.tts` | fn | 浏览器 TTS | `(text,{lang}) => Promise<Blob\|ArrayBuffer\|url\|null>`；返回音频则音频驱动口型 |
+| `voice.tts` | fn | 浏览器 TTS | `(text,{lang}) => Promise<音频(Blob\|ArrayBuffer\|typed array\|url) \| {done, cancel?} \| null>`；音频 → 音频驱动口型；`{done, cancel?}` → provider 自己出声、按字估算口型；`null` → 无 TTS（`reason:'no-tts'`） |
 | `voice.lang` | string | `'zh-CN'` | TTS 语言 |
 | `voice.cooldownMs` | number | `8000` | 状态机 / 意图自动语音的冷却 |
 ```

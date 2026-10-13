@@ -10,6 +10,7 @@
 //   3) 意图/情绪信号      → intent/emotion → 动作（reactTo），走一次性表演而非状态
 //
 // 完全不依赖具体 Agent 框架；接入方提供「事件源」和「映射」即可。
+import { resolvePerformance } from '../core/performance.js';
 
 /** 标准事件类型（StateDriver.resolveEvent 认识的） */
 export const STD_EVENTS = [
@@ -89,19 +90,23 @@ export class AgentBridge {
 
   /**
    * 意图/情绪反应：让宠物做一次性表演（不改变状态机的工作状态）。
+   * intentMap 的值可以是动作名或表演对象 { action, expression, gesture, voice, say, holdMs }。
    * @param {string} intent  如 'happy' / 'greet' / 'shy'
+   * @param {Object} [opts]  { silent: true } 跳过语音
    */
-  reactTo(intent) {
-    const action = this.intentMap[intent];
-    if (!action) return action;
-    // 若映射到的是表情特写（在 pack.emotes.actions 里），走特写弹层；否则本体播放
+  reactTo(intent, opts = {}) {
+    const perf = resolvePerformance(this.intentMap[intent]);
+    if (!perf) return null;
+    // 若动作是表情特写（在 pack.emotes.actions 里），走特写弹层；否则交给 DeskPet 表演
     const emotes = this.pet.pack && this.pet.pack.emotes;
-    if (emotes && emotes.actions && emotes.actions[action] && this.pet.emote) {
-      this.pet.emote(action);
+    if (perf.action && emotes && emotes.actions && emotes.actions[perf.action] && this.pet.emote) {
+      this.pet.emote(perf.action);
+      // 特写只替代动作；表情 / 手势 / 语音 / 气泡照常执行
+      this.pet.perform({ ...perf, action: null }, { kind: 'REACT:' + intent, silent: !!opts.silent });
     } else {
-      this.pet.play(action, { loop: false, kind: 'REACT:' + intent });
+      this.pet.perform(perf, { kind: 'REACT:' + intent, silent: !!opts.silent });
     }
-    return action;
+    return perf;
   }
 
   unbindAll() { this._unbinders.forEach((u) => u()); this._unbinders = []; }

@@ -13,6 +13,7 @@ const RENDERER_GROUPS = {
   pixel:       { icon: '🎨', name: '像素 Canvas' },
   svg:         { icon: '🦴', name: 'SVG 矢量骨骼' },
   three:       { icon: '🧊', name: 'Three.js 3D' },
+  gltf:        { icon: '🧍', name: 'GLTF 3D 角色' },
 };
 
 async function main() {
@@ -55,7 +56,7 @@ async function main() {
       card.className = 'card';
       const playgroundHref = `../playground/?pet=${encodeURIComponent(pack.id)}&renderer=${encodeURIComponent(r)}`;
       const chatHref = `../chat/index.html?pet=${encodeURIComponent(pack.id)}`;
-      const canChat = (pack.renderers || []).includes('webm');
+      const canChat = pack.chat === true;
       card.innerHTML =
         `<div class="ico">${info.icon}</div>` +
         `<h3>${pack.meta.name || pack.name || pack.id}</h3>` +

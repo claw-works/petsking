@@ -1,6 +1,6 @@
 // renderer-base.js — 渲染器统一接口
 //
-// 所有渲染器（webm/gif/spritesheet/pixel/svg/three）都实现同一套接口，
+// 所有渲染器（webm/gif/spritesheet/pixel/svg/three/gltf 共七种）都实现同一套接口，
 // 这样 DeskPet 主类可以无差别地组合任意渲染器 + 任意驱动 + 任意素材包。
 //
 // 渲染器只负责「把某个动作画出来」，不关心动作是怎么选的（那是 Driver 的事）。
@@ -41,6 +41,25 @@ export class RendererBase {
 
   /** 该渲染器支持的动作名列表（默认取素材包声明的） */
   listActions() { return this.assets.actions ? Object.keys(this.assets.actions) : []; }
+
+  // —— 可选能力（基类空实现；不支持的渲染器调用时静默忽略）——
+
+  /** 支持哪些能力：playground 据此显示面板，DeskPet 据此决定是否调用 */
+  // 子类用 getter 覆写（get capabilities() {...}），不要用赋值字段
+  get capabilities() { return { expression: false, mouth: false, gesture: false }; }
+
+  /** 切表情预设；未知名字回落 neutral */
+  setExpression(_name) {}
+  /** [{ id, label }] */
+  listExpressions() { return []; }
+
+  /** 口型帧：{ open, wide, round }（音频分析）| { viseme }（按字估算）| null（闭嘴） */
+  setMouth(_frame) {}
+
+  /** 程序化头部 / 上身小动作；null 清除 */
+  setGesture(_name) {}
+  /** 手势名列表 */
+  listGestures() { return []; }
 
   /** 卸载、释放资源 */
   destroy() { throw new Error('renderer.destroy() not implemented'); }

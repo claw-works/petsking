@@ -4,12 +4,13 @@
 // 融合 dsh-desktop-pet（确定性 + 多任务折叠 + flash/sleep）与 whale（Agent 语义）。
 //
 // config：
-//   stateActions: { SEMANTIC: actionName }   状态→动作映射（来自素材包）
+//   stateActions: { SEMANTIC: actionName | 表演对象 }   状态→动作映射（来自素材包，见 performance.js）
 //   flashMs, sleepAfterMs                     计时
 //   idleAction                                默认 idle 动作名
 //
 // 外部通过 pet.feed(event) → driver.feed(event) 喂事件（见 ai/agent-bridge.js）。
 import { DriverBase, registerDriver, createDriver } from './driver-base.js';
+import { resolvePerformance, performanceMeta } from './performance.js';
 
 export const SEMANTIC_PRIORITY = {
   WAITING_FOR_USER: 60, ERROR: 50,
@@ -68,8 +69,8 @@ export class StateDriver extends DriverBase {
     try {
       this._idleChain = createDriver('chain', { ...this._chainConfig });
       this._idleChain.onAction((action, meta) => {
-        // 只有仍处于 IDLE 时才转发链的动作（防止竞态）
-        if (this.state === 'IDLE') this._emit(action, { ...meta, kind: 'IDLE' });
+        // 只有仍处于 IDLE 时才转发链的动作（防止竞态）；点击表演保留 CLICK（DeskPet 按它走意图层 / 不占语音冷却）
+        if (this.state === 'IDLE') this._emit(action, { ...meta, kind: meta.kind === 'CLICK' ? 'CLICK' : 'IDLE' });
       });
     } catch (e) { this._idleChain = null; }
   }
@@ -135,11 +136,32 @@ export class StateDriver extends DriverBase {
     }
     // 离开 IDLE（进入工作/睡眠等状态）→ 停掉自主陪伴，按状态播动作
     this._stopIdleChain();
-    const action = this.stateActions[state] || this.idleAction;
-    this._emit(action, { loop: true, kind: state });
+    // stateActions 的值可以是动作名或表演对象 { action, expression, gesture, voice }
+    const perf = resolvePerformance(this.stateActions[state]) || { action: this.idleAction };
+    this._emit(perf.action || this.idleAction, { loop: true, kind: state, ...performanceMeta(perf) });
   }
 
-  click() { if (this.clickAction) this._emit(this.clickAction, { loop: false, kind: 'CLICK' }); }
+  /** IDLE 且有内部概率链时，把调用转给它；否则返回 null（不做任何事） */
+  _idleChainIfIdle() {
+    return this.state === 'IDLE' && this._idleChain ? this._idleChain : null;
+  }
+
+  /** 让路（见 ChainDriver.hold）：只在 IDLE 委托给概率链时生效，其它状态 no-op */
+  hold(ms) { const c = this._idleChainIfIdle(); if (c) c.hold(ms); }
+  /** 立即换下一个自主动作（走到边缘时 DeskPet 调用）：只在 IDLE 委托给概率链时生效 */
+  pickNext() { const c = this._idleChainIfIdle(); if (c) c.pickNext(); }
+  /** 动作展示时长：IDLE 时按概率链的 playMs，其它状态返回 null（状态动作不会被掷骰顶掉，不需要让路） */
+  playMsFor(action) { const c = this._idleChainIfIdle(); return c ? c.playMsFor(action) : null; }
+
+  /**
+   * 点击：配置了 clickAction 就播它；否则 IDLE 且概率链有 clicks 时委托给概率链的点击表演
+   * （让清霄这类在 chain.clicks 里写表演对象的素材包在 statemachine 模式下也能点击互动）。
+   */
+  click() {
+    if (this.clickAction) { this._emit(this.clickAction, { loop: false, kind: 'CLICK' }); return; }
+    const c = this._idleChainIfIdle();
+    if (c && c.clicks.length) c.click();
+  }
 
   get semanticState() { return this.state; }
 }

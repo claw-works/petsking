@@ -1,0 +1,15 @@
+{
+  "name": "@claw-works/pet-lib",
+  "version": "0.1.0",
+  "description": "渲染无关、驱动可插拔、程序与素材分离的桌宠 / 角色皮肤库",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./voice": "./voice/index.js"
+  },
+  "files": ["**/*.js", "!**/*.test.js", "README.md"],
+  "peerDependencies": { "three": ">=0.160.0" },
+  "peerDependenciesMeta": { "three": { "optional": true } },
+  "license": "MIT"
+}

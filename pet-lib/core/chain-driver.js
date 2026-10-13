@@ -4,8 +4,9 @@
 // config（来自素材包的 chain 段 + 用户覆盖）：
 //   idle:[], actions:[], categories:[{id,weight,actions}], clicks:[]
 //   weights:{ idle, action }         顶层权重（category = 100 - idle - action）
-//   playMs(action) 或 playMs:number  一个动作播多久后接下一个
+//   playMs(action) 或 playMs:number 或 playMs:{动作名:ms, default?:ms}  一个动作播多久后接下一个
 import { DriverBase, registerDriver } from './driver-base.js';
+import { resolvePerformance, performanceMeta } from './performance.js';
 
 function pick(pool, exclude) {
   const e = exclude ? pool.filter((n) => n !== exclude) : pool;
@@ -35,12 +36,30 @@ export class ChainDriver extends DriverBase {
     this.categories = config.categories || [];
     this.clicks = config.clicks || [];
     this.weights = config.weights || { idle: 40, action: 30 };
-    this._playMs = config.playMs || (() => 8000 + Math.random() * 12000);
+    this._playMs = config.playMs || null;
     this.timer = null;
     this.paused = false;
   }
 
-  _ms(action) { return typeof this._playMs === 'function' ? this._playMs(action) : this._playMs; }
+  _ms(action) {
+    const p = this._playMs;
+    if (typeof p === 'function') return p(action);
+    if (typeof p === 'number') return p;
+    // 按动作的对象映射：{ "<action>": ms, default?: ms }，缺省回落随机默认值
+    if (p && typeof p === 'object') return p[action] ?? p.default ?? this._defaultMs();
+    return this._defaultMs();
+  }
+  _defaultMs() { return 8000 + Math.random() * 12000; }
+
+  /** 某个动作的展示时长（ms）：按 playMs 配置，未配置时为随机默认值。DeskPet.perform 用它决定让路多久 */
+  playMsFor(action) { return this._ms(action); }
+
+  /** 让路：清掉当前定时器，ms 后再掷骰（不发动作；暂停时不排期） */
+  hold(ms) {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    if (this.paused) return;
+    this.timer = setTimeout(() => this.pickNext(), ms);
+  }
 
   start() { this.paused = false; this._chain(pick(this.idle), 'IDLE'); }
   stop() { if (this.timer) { clearTimeout(this.timer); this.timer = null; } this.paused = true; }
@@ -68,10 +87,12 @@ export class ChainDriver extends DriverBase {
 
   click() {
     if (!this.clicks.length) return;
-    const a = pick(this.clicks);
-    this._emit(a, { loop: false, kind: 'CLICK' });
+    // clicks 里可以是动作名或表演对象 { action, expression, gesture, voice }
+    const perf = resolvePerformance(pick(this.clicks));
+    if (!perf || !perf.action) return;
+    this._emit(perf.action, { loop: false, kind: 'CLICK', ...performanceMeta(perf) });
     if (this.timer) clearTimeout(this.timer);
-    if (!this.paused) this.timer = setTimeout(() => this.pickNext(), this._ms(a));
+    if (!this.paused) this.timer = setTimeout(() => this.pickNext(), this._ms(perf.action));
   }
 }
 

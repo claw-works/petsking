@@ -38,3 +38,5 @@ export { mergeConfig, loadAssetPack, DEFAULT_CONFIG, SCENES } from './config.js'
 export { RENDERERS, createRenderer, registerRenderer, RendererBase } from './renderers/renderer-base.js';
 export { DRIVERS, createDriver, registerDriver, DriverBase } from './core/driver-base.js';
 export { AgentBridge, LlmAdapter, STD_EVENTS, DEFAULT_INTENT_MAP } from './ai/index.js';
+export { resolvePerformance } from './core/performance.js';
+export { Voice, AudioLipSync, browserTts, loadVoicePack } from './voice/index.js';

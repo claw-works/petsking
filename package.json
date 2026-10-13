@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "server": "bun run server/index.js",
-    "test": "bun test server"
+    "test": "bun test server pet-lib"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1123.0",

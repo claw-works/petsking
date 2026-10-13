@@ -29,7 +29,10 @@ async function fetchManifest() {
   return res.json();
 }
 
+let rebuildToken = 0;   // 每次 rebuild +1：异步回来的旧结果（如上一只宠物的 voicePack）据此丢弃
+
 async function rebuild() {
+  const token = ++rebuildToken;
   if (pet) { pet.destroy(); pet = null; }
   mount.innerHTML = '';
   const driver = document.getElementById('sel-driver').value;
@@ -46,9 +49,15 @@ async function rebuild() {
     pet.on('click', () => log('👆 click'));
     pet.setFacing(document.getElementById('sel-facing').value);
     log('已加载 ' + petId + ' / ' + renderer + ' / ' + driver);
+    // 只记录没能出声的情况（被锁、冷却、无 TTS、已关闭等）
+    pet.on('speech', ({ phase, text, reason, played }) => { if (phase === 'end' && played === false && reason) log('🔇 未出声: ' + reason + ' · ' + text); });
+    renderFaceControls(token);
   } catch (e) {
     log('❌ 创建失败: ' + e.message);
-    mount.innerHTML = '<div style="color:#ff9db0;padding:20px;font-size:13px">创建失败：' + e.message + '</div>';
+    const err = document.createElement('div');
+    err.style.cssText = 'color:#ff9db0;padding:20px;font-size:13px';
+    err.textContent = '创建失败：' + e.message;
+    mount.replaceChildren(err);
   }
 }
 
@@ -205,6 +214,39 @@ function renderIntents() {
   });
 }
 
+// —— 表情 / 头部小动作 / 语音台词：按渲染器能力与素材包语音包显示 ——
+function fillRow(sectionId, rowId, items, onClick) {
+  const sec = document.getElementById(sectionId);
+  const row = document.getElementById(rowId);
+  row.innerHTML = '';
+  sec.style.display = items.length ? '' : 'none';
+  items.forEach(({ id, label, title }) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (title) b.title = title;
+    b.addEventListener('click', () => onClick(id));
+    row.appendChild(b);
+  });
+}
+
+async function renderFaceControls(token) {
+  if (!pet) return;
+  const r = pet.renderer;
+  const caps = (r && r.capabilities) || {};
+  fillRow('expr-section', 'expr-row',
+    caps.expression ? r.listExpressions().map((e) => ({ id: e.id, label: e.label })) : [],
+    (id) => { manualHold(); pet.setExpression(id); log('表情: ' + id); });
+  fillRow('gesture-section', 'gesture-row',
+    caps.gesture ? [...r.listGestures().map((g) => ({ id: g, label: g })), { id: null, label: '清除' }] : [],
+    (id) => { manualHold(); pet.setGesture(id); log('手势: ' + (id || '清除')); });
+  const p = pet;
+  const pack = await p.voicePack();
+  if (token !== rebuildToken || p !== pet) return;   // 等语音包期间已经换了宠物 / 重建：不要把旧台词填进来
+  fillRow('voice-section', 'voice-row',
+    pack ? pack.lines.map((l) => ({ id: l.id, label: l.label || l.id, title: l.text })) : [],
+    async (id) => { const res = await pet.voice(id); log('语音: ' + id + (res.played ? '' : ' ✗ ' + res.reason)); });
+}
+
 function bindControls() {
   const sel = document.getElementById('sel-renderer');
   // 只列该 pet 支持的渲染器
@@ -242,6 +284,12 @@ function bindControls() {
       pet.feed(ev); log('feed: ' + ev.type);
     });
   });
+
+  const speakInput = document.getElementById('speak-input');
+  const doSpeak = () => { if (pet && speakInput.value.trim()) { pet.speak(speakInput.value.trim()); log('说: ' + speakInput.value.trim()); } };
+  document.getElementById('speak-btn').addEventListener('click', doSpeak);
+  speakInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSpeak(); });
+  document.getElementById('speak-stop').addEventListener('click', () => { if (pet) pet.stopSpeak(); });
 
   bindViewControls();
 }
@@ -283,6 +331,14 @@ function bindViewControls() {
 async function main() {
   try { manifest = await fetchManifest(); }
   catch (e) { log('❌ ' + e.message); return; }
+  // 高瘦素材包（aspect < 1）：先把大小收到合适值，免得舞台高度超出视口
+  const aspect = (manifest.geometry && manifest.geometry.aspect) || manifest.aspect;
+  if (aspect && aspect < 1) {
+    const rngSize = document.getElementById('rng-size');
+    const v = Math.round(Math.min(520, 480 * aspect));
+    rngSize.value = v;
+    document.getElementById('size-val').textContent = rngSize.value + 'px';
+  }
   bindControls();
   renderMeta();
   renderActionGrid();
