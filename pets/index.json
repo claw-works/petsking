@@ -1,11 +1,12 @@
 {
   "pets": [
-    { "id": "blue-whale", "name": "蓝鲸小助手", "renderers": ["webm"], "path": "blue-whale/pet.json" },
-    { "id": "canhong", "name": "残红", "renderers": ["webm"], "path": "canhong/pet.json" },
-    { "id": "zaowu", "name": "早雾", "renderers": ["webm"], "path": "zaowu/pet.json" },
+    { "id": "blue-whale", "name": "蓝鲸小助手", "renderers": ["webm"], "path": "blue-whale/pet.json", "chat": true },
+    { "id": "canhong", "name": "残红", "renderers": ["webm"], "path": "canhong/pet.json", "chat": true },
+    { "id": "zaowu", "name": "早雾", "renderers": ["webm"], "path": "zaowu/pet.json", "chat": true },
     { "id": "whale-gif", "name": "像素鲸鱼(GIF)", "renderers": ["gif"], "path": "whale-gif/pet.json" },
     { "id": "pixel-puff", "name": "蓝噗(像素)", "renderers": ["pixel"], "path": "pixel-puff/pet.json" },
     { "id": "chibi-svg", "name": "矢量小生物(SVG)", "renderers": ["svg"], "path": "chibi-svg/pet.json" },
-    { "id": "chibi-3d", "name": "3D 小女孩(Three.js)", "renderers": ["three"], "path": "chibi-3d/pet.json" }
+    { "id": "chibi-3d", "name": "3D 小女孩(Three.js)", "renderers": ["three"], "path": "chibi-3d/pet.json" },
+    { "id": "qingxiao", "name": "清霄", "renderers": ["gltf"], "path": "qingxiao/pet.json", "chat": true }
   ]
 }

@@ -1,0 +1,65 @@
+{
+  "id": "qingxiao",
+  "renderer": "gltf",
+  "renderers": ["gltf"],
+  "meta": {
+    "name": "清霄",
+    "description": "GLTF 3D 角色：骨骼动画 + morph 表情 + 音频驱动口型 + 预录语音 + 程序化头部小动作。模型与语音需另行同步（见 pets/qingxiao/README.md）。"
+  },
+  "assetsDir": "assets/",
+  "model": "model.glb",
+  "voices": "voices/index.json",
+  "camera": "full",
+  "aspect": 0.6,
+  "turnDeg": 70,
+  "actions": {
+    "idle": "Stand2",
+    "fidget-1": { "clip": "Stand1_Action01", "once": true },
+    "fidget-2": { "clip": "Stand1_Action02", "once": true },
+    "fidget-3": { "clip": "Stand1_Action03", "once": true },
+    "walk-left": { "clip": "Walk_F", "yaw": -70, "speed": 1.011 },
+    "walk-right": { "clip": "Walk_F", "yaw": 70, "speed": 1.011 },
+    "run": { "clip": "Run_F", "speed": 4.09 }
+  },
+  "walk": { "left": "walk-left", "right": "walk-right", "speed": 60, "margin": 20 },
+  "chain": {
+    "idle": ["idle"],
+    "actions": ["walk-left", "walk-right"],
+    "categories": [
+      { "id": "小动作", "weight": 45, "actions": ["fidget-1", "fidget-2", "fidget-3"] }
+    ],
+    "clicks": [
+      { "action": "fidget-2", "expression": "smile", "voice": "hello" },
+      { "action": "fidget-3", "expression": "happy" },
+      { "action": "idle", "expression": "shy", "gesture": "lookDown" },
+      { "action": "idle", "expression": "wink", "gesture": "tilt" }
+    ],
+    "weights": { "idle": 40, "action": 15 }
+  },
+  "stateActions": {
+    "STARTING":         { "action": "idle", "expression": "smile",   "gesture": "nod",      "voice": "hello" },
+    "IDLE":             "idle",
+    "THINKING":         { "action": "idle", "expression": "neutral", "gesture": "tilt",     "voice": "thinking" },
+    "WORKING":          { "action": "idle", "expression": "neutral", "gesture": "lean",     "voice": "task" },
+    "CODING":           { "action": "idle", "expression": "neutral", "gesture": "lean" },
+    "RUNNING_COMMAND":  { "action": "idle", "expression": "neutral", "gesture": "lean",     "voice": "wait" },
+    "WAITING_FOR_USER": { "action": "idle", "expression": "neutral", "gesture": "lookUp",   "voice": "new_message" },
+    "SUCCESS":          { "action": "idle", "expression": "smile",   "gesture": "nod",      "voice": "done" },
+    "ERROR":            { "action": "idle", "expression": "sad",     "gesture": "lookDown", "voice": "error" },
+    "SLEEPING":         { "action": "idle", "expression": "neutral", "gesture": "lookDown" }
+  },
+  "intentMap": {
+    "greet":     { "action": "fidget-2", "expression": "smile",     "gesture": "nod",      "voice": "hello" },
+    "happy":     { "action": "fidget-3", "expression": "happy" },
+    "praise":    { "action": "idle",     "expression": "smile",     "gesture": "nod",      "voice": "praise" },
+    "cheer":     { "action": "idle",     "expression": "smile",     "gesture": "nod",      "voice": "cheer" },
+    "think":     { "action": "idle",     "expression": "neutral",   "gesture": "tilt",     "voice": "thinking" },
+    "shy":       { "action": "idle",     "expression": "shy",       "gesture": "lookDown" },
+    "sad":       { "action": "idle",     "expression": "sad",       "gesture": "lookDown" },
+    "angry":     { "action": "idle",     "expression": "angry",     "gesture": "shake" },
+    "surprised": { "action": "idle",     "expression": "surprised", "gesture": "lookUp" },
+    "wink":      { "action": "fidget-1", "expression": "wink" },
+    "worry":     { "action": "idle",     "expression": "neutral",   "gesture": "lean",     "voice": "stay" },
+    "bye":       { "action": "fidget-2", "expression": "smile",     "gesture": "nod",      "voice": "bye" }
+  }
+}
