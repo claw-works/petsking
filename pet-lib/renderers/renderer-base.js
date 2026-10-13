@@ -45,6 +45,7 @@ export class RendererBase {
   // —— 可选能力（基类空实现；不支持的渲染器调用时静默忽略）——
 
   /** 支持哪些能力：playground 据此显示面板，DeskPet 据此决定是否调用 */
+  // 子类用 getter 覆写（get capabilities() {...}），不要用赋值字段
   get capabilities() { return { expression: false, mouth: false, gesture: false }; }
 
   /** 切表情预设；未知名字回落 neutral */

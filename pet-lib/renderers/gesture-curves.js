@@ -22,7 +22,9 @@ export function gestureWeight(g, t, releasedAt = null) {
   let w = Math.min(1, t / FADE);
   if (g.once) w = Math.min(w, Math.max(0, (g.dur - t) / FADE));
   if (releasedAt != null) w = Math.min(w, Math.max(0, 1 - (t - releasedAt) / FADE));
-  return w;
+  w = Math.min(1, Math.max(0, w));
+  // smoothstep：淡入淡出两端速度为 0，消除线性权重的速度拐点
+  return w * w * (3 - 2 * w);
 }
 
 export function gestureDone(g, t, releasedAt = null) {

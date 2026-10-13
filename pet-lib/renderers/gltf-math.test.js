@@ -11,10 +11,23 @@ test('full：以身高中点为目标，留 12% 余量装下全身', () => {
   expect(f.fov).toBe(30);
 });
 
-test('bust：以头骨下方 0.2m 为中心，可视高度 0.8m', () => {
+test('bust：可视高度 0.5 身高，中心在头骨下 0.12 身高', () => {
   const f = frameCamera({ mode: 'bust', height: 1.7, headY: 1.55, fovDeg: 30 });
-  expect(f.target[1]).toBeCloseTo(1.35, 5);
-  expect(f.distance).toBeCloseTo(0.4 / Math.tan(Math.PI / 12), 5);
+  expect(f.target[1]).toBeCloseTo(1.55 - 0.204, 5);
+  expect(f.distance).toBeCloseTo((0.85 / 2) / Math.tan(Math.PI / 12), 5);
+});
+
+test('full：脚不在原点（minY = -0.9）时中心随包围盒下沿平移', () => {
+  const f = frameCamera({ mode: 'full', minY: -0.9, height: 1.7, fovDeg: 30 });
+  expect(f.target[1]).toBeCloseTo(-0.05, 5);
+  expect(f.position[1]).toBeCloseTo(-0.05, 5);
+});
+
+test('bust：画面顶沿不低于 headY + 0.1 身高（头顶留余量）', () => {
+  const height = 1.7, headY = 1.55, fovDeg = 30;
+  const f = frameCamera({ mode: 'bust', height, headY, fovDeg });
+  const viewH = 2 * f.distance * Math.tan(Math.PI / 12);
+  expect(f.target[1] + viewH / 2).toBeGreaterThanOrEqual(headY + 0.1 * height);
 });
 
 test('bust 但找不到头骨 → 回落 full', () => {

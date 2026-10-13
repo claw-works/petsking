@@ -23,7 +23,8 @@ test('一次型在 dur 前 FADE 秒开始淡出，dur 时归零并结束', () =>
 test('持续型不会自己结束；release 后 FADE 秒淡出结束', () => {
   const g = GESTURES.lookDown;
   expect(gestureDone(g, 999, null)).toBe(false);
-  expect(gestureWeight(g, 5, 4.9)).toBeCloseTo(1 - 0.1 / FADE, 5);
+  const lin = 1 - 0.1 / FADE;
+  expect(gestureWeight(g, 5, 4.9)).toBeCloseTo(lin * lin * (3 - 2 * lin), 5);
   expect(gestureDone(g, 4 + FADE + 0.01, 4)).toBe(true);
 });
 
