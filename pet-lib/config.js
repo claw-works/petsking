@@ -81,7 +81,7 @@ export async function loadAssetPack(pet, petsBaseUrl = 'pets/') {
   else if (!/^https?:|^\//.test(assets.baseUrl)) assets.baseUrl = baseDir + assets.baseUrl;
   // 透传渲染几何/网格/调色板等
   for (const k of ['geometry', 'grid', 'sheet', 'palette', 'frames', 'colors', 'model', 'frameMs', 'autoSpin', 'fps',
-    'camera', 'turnDeg', 'shadow', 'expressions', 'blush', 'fur', 'springBones', 'gestureBones']) {
+    'camera', 'turnDeg', 'shadow', 'expressions', 'blush', 'fur', 'springBones', 'gestureBones', 'aspect']) {
     if (manifest[k] != null && assets[k] == null) assets[k] = manifest[k];
   }
   if (assets.actions == null) assets.actions = manifest.actions || {};

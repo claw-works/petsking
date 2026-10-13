@@ -23,6 +23,7 @@
   },
   "walk": { "left": "walk-left", "right": "walk-right", "speed": 60, "margin": 20 },
   "chain": {
+    "playMs": { "fidget-1": 43500, "fidget-2": 15700, "fidget-3": 25000 },
     "idle": ["idle"],
     "actions": ["walk-left", "walk-right"],
     "categories": [

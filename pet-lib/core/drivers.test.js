@@ -49,3 +49,31 @@ test('ChainDriver.click：字符串形式保持旧行为', () => {
   expect(calls.at(-1)).toEqual(['click-happy', { loop: false, kind: 'CLICK' }]);
   d.stop();
 });
+
+test('ChainDriver：playMs 支持按动作的对象映射（含 default）', () => {
+  const d = new ChainDriver({ playMs: { a: 123, default: 456 } });
+  expect(d._ms('a')).toBe(123);
+  expect(d._ms('b')).toBe(456);
+  const d2 = new ChainDriver({ playMs: { a: 1 } });
+  const ms = d2._ms('zzz');
+  expect(ms).toBeGreaterThanOrEqual(8000);
+  expect(ms).toBeLessThan(20000);
+});
+
+test('ChainDriver：hold 清掉定时器并在 ms 后 pickNext，不发动作；暂停时不排期', async () => {
+  const d = new ChainDriver({ idle: ['idle'], playMs: 100000 });
+  const calls = capture(d);
+  d.start();
+  expect(calls.length).toBe(1);
+  let picked = 0;
+  d.pickNext = () => { picked++; };
+  d.hold(20);
+  expect(calls.length).toBe(1);
+  await new Promise((r) => setTimeout(r, 60));
+  expect(picked).toBe(1);
+  d.stop();
+  d.hold(10);
+  expect(d.timer).toBe(null);
+  await new Promise((r) => setTimeout(r, 30));
+  expect(picked).toBe(1);
+});

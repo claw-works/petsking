@@ -261,8 +261,13 @@ export class DeskPet {
       const dt = (now - last) / 1000; last = now;
       x += dir * speed * dt;
       // 到边界：贴边并停止本次位移（下次掷骰会换动作/方向）
-      if (x <= minX) { x = minX; this.root.style.left = x + 'px'; this._moveRaf = null; return; }
-      if (x >= maxX) { x = maxX; this.root.style.left = x + 'px'; this._moveRaf = null; return; }
+      // 到边后立即让驱动换下一个动作，避免原地踏步直到下次掷骰（暂停时 pickNext 自身会忽略）
+      const hitEdge = () => {
+        this._moveRaf = null;
+        if (this.driver && typeof this.driver.pickNext === 'function' && !this._dragging) this.driver.pickNext();
+      };
+      if (x <= minX) { x = minX; this.root.style.left = x + 'px'; hitEdge(); return; }
+      if (x >= maxX) { x = maxX; this.root.style.left = x + 'px'; hitEdge(); return; }
       this.root.style.left = x + 'px';
       this._moveRaf = requestAnimationFrame(step);
     };
@@ -329,7 +334,11 @@ export class DeskPet {
    */
   perform(perf, { kind, silent = false } = {}) {
     if (!perf || this._destroyed) return this;
-    if (perf.action) this.play(perf.action, { loop: false, kind });
+    if (perf.action) {
+      this.play(perf.action, { loop: false, kind });
+      // 概率链让路：表演动作播放期间不被下一次掷骰顶掉（StateDriver 无 hold 则跳过）
+      if (this.driver && typeof this.driver.hold === 'function') this.driver.hold(perf.holdMs ?? 8000);
+    }
     if (perf.expression || perf.gesture) {
       this._setReact(perf.expression, perf.gesture, perf.holdMs);
     }

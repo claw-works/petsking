@@ -323,6 +323,14 @@ function bindViewControls() {
 async function main() {
   try { manifest = await fetchManifest(); }
   catch (e) { log('❌ ' + e.message); return; }
+  // 高瘦素材包（aspect < 1）：先把大小收到合适值，免得舞台高度超出视口
+  const aspect = (manifest.geometry && manifest.geometry.aspect) || manifest.aspect;
+  if (aspect && aspect < 1) {
+    const rngSize = document.getElementById('rng-size');
+    const v = Math.round(Math.min(520, 480 * aspect));
+    rngSize.value = v;
+    document.getElementById('size-val').textContent = rngSize.value + 'px';
+  }
   bindControls();
   renderMeta();
   renderActionGrid();

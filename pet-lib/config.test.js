@@ -53,3 +53,8 @@ test('voices 不是字符串 → 警告并置 null', async () => {
     expect(warned).toBe(1);
   } finally { console.warn = warn; }
 });
+
+test('aspect 透传到 assets', async () => {
+  const pack = await loadAssetPack({ id: 'x', aspect: 0.5, actions: {} });
+  expect(pack.assets.aspect).toBe(0.5);
+});
