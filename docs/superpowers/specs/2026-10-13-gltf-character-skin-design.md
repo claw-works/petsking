@@ -62,6 +62,9 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
 - 灯光沿用 qingxiao 的 key/fill/top/front/rim/hemisphere 组合，ACES tone mapping。
 - 固定相机，无 OrbitControls（拖拽交给 DeskPet 移动整只宠物）。取景由 pet.json `camera` 决定：
   `"full"`（全身，默认）/ `"bust"`（半身，以 `Bip001Head` 骨骼定位）/ 或 `{ position, target, fov }` 显式指定。
+  `full` 不再只按待机姿势的身高取景：加载时把每个动作 clip（按各自 yaw，待机另加 ±turnDeg）逐帧采样，记录模型顶点的
+  包络盒与每帧轮廓点，`fitCamera` 按当前容器宽高比逐点求相机距离，高宽两个方向都装下并四周留 `framePadding`（默认 10%）；
+  容器尺寸变化时重新装框。可用 `frameBox` 手动指定包络跳过采样。
   加载后按模型包围盒高度自动对焦（qingxiao `resetStage` 的算法）。
 - `useRootMotion = false`，原地走跑；水平位移复用 DeskPet 现有 `pack.walk` 的 px 平移。
 - 容器尺寸变化用 `ResizeObserver`（不是 window resize），因为 playground 会运行时 `setSize`。

@@ -202,7 +202,7 @@ await pet.llm.react('用户夸了它很可爱');  // 模型返回 {intent, say}�
 - `webm` / `gif`：`{ 动作: "文件名" }`；webm 另需 `geometry:{aspect,feetRatio}`
 - `spritesheet`：`sheet`+`grid:{cols,cellW,cellH}`，`actions:{动作:{row,durations:[...]}}`
 - `pixel`：`grid:{w,h}`+`palette:{字符:色}`+`frames:{键:[网格行]}`，`actions:{动作:[帧键...]}`
-- `gltf`：`model`、`camera`(`full`/`bust`/对象)、`turnDeg`（顶层，`setFacing` 转身角度，默认 70）、`aspect`（舞台宽高比，控制舞台高度）、`voices`；`actions:{动作:"Clip" | {clip, once, yaw, speed, speedScale}}`（`yaw` 为播该动作时的身体朝向，如 `walk-left: -70` / `walk-right: 70`）；
+- `gltf`：`model`、`camera`(`full`/`bust`/对象；`full` 按所有动作的包络取景，高宽都装下)、`framePadding`（`full` 取景四周留白比例，默认 0.1）、`frameBox`（手动指定包络盒，跳过加载时约 0.3s 的采样）、`turnDeg`（顶层，`setFacing` 转身角度，默认 70）、`aspect`（舞台宽高比，控制舞台高度）、`voices`；`actions:{动作:"Clip" | {clip, once, yaw, speed, speedScale}}`（`yaw` 为播该动作时的身体朝向，如 `walk-left: -70` / `walk-right: 70`）；
   模型修正开关（默认全关）`scale`、`stripRootMotion` + `rootBone`、`materialFixes`（`"kuro"`），口型 / 眨眼 `blinkMorph`、`visemes`、`mouthMap`，
   腮红材质 `blush.material`，见 `renderers/gltf.js` 头注释
 - `svg` / `three`：`colors:{...}`，`actions:{动作:"内置姿势名"}`（模型/姿势内置在渲染器）

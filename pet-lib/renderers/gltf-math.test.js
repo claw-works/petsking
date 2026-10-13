@@ -66,3 +66,68 @@ test('mouthTargets：自定义映射可组合多个特征', () => {
   expect(t.jawOpen).toBeCloseTo(0.5, 6);
   expect(t.mouthWide).toBeCloseTo(0.5 * (0.4 + 0.6 * 0.5), 6);
 });
+
+// —— fitCamera：按动作包络盒取景，高宽两个方向都留白 ——
+import { fitCamera } from './gltf-math.js';
+
+// 包络盒最靠近相机那一面（z = max.z）上的点投影到 NDC
+function ndcAtFront(f, box, x, y, aspect) {
+  const t = Math.tan((f.fov * Math.PI) / 360);
+  const depth = f.position[2] - box.max[2];
+  return [(x - f.position[0]) / (depth * t * aspect), (y - f.position[1]) / (depth * t)];
+}
+
+test('fitCamera：高瘦包络在宽容器里由高度决定，上下各留 padding', () => {
+  const box = { min: [-0.3, 0, -0.2], max: [0.3, 2, 0.2] };
+  const f = fitCamera({ box, fovDeg: 30, aspect: 1, padding: 0.1 });
+  const [, top] = ndcAtFront(f, box, 0, 2, 1);
+  const [, bottom] = ndcAtFront(f, box, 0, 0, 1);
+  expect(top).toBeCloseTo(0.9, 6);
+  expect(bottom).toBeCloseTo(-0.9, 6);
+});
+
+test('fitCamera：宽包络在窄容器里由宽度决定，左右各留 padding，高度也不超', () => {
+  const box = { min: [-1, 0, -0.5], max: [1, 2, 0.5] };
+  const aspect = 0.6;
+  const f = fitCamera({ box, fovDeg: 30, aspect, padding: 0.1 });
+  const [l] = ndcAtFront(f, box, -1, 1, aspect);
+  const [r] = ndcAtFront(f, box, 1, 1, aspect);
+  const [, top] = ndcAtFront(f, box, 0, 2, aspect);
+  expect(l).toBeCloseTo(-0.9, 6);
+  expect(r).toBeCloseTo(0.9, 6);
+  expect(Math.abs(top)).toBeLessThanOrEqual(0.9 + 1e-9);
+});
+
+test('fitCamera：不对称包络 → 对准包络中心平视（target 与相机同 x/y）', () => {
+  const box = { min: [-1.1, -0.1, -1.1], max: [0.9, 2.1, 0.6] };
+  const f = fitCamera({ box, fovDeg: 30, aspect: 0.88, padding: 0.1 });
+  expect(f.target[0]).toBeCloseTo(-0.1, 6);
+  expect(f.target[1]).toBeCloseTo(1.0, 6);
+  expect(f.position[0]).toBe(f.target[0]);
+  expect(f.position[1]).toBe(f.target[1]);
+  expect(f.target[2]).toBe(0);
+  expect(f.distance).toBe(f.position[2]);   // 到角色平面 z=0 的距离（步速换算用）
+});
+
+test('fitCamera：padding 越大相机越远', () => {
+  const box = { min: [-0.5, 0, -0.3], max: [0.5, 1.8, 0.3] };
+  const a = fitCamera({ box, aspect: 0.8, padding: 0.05 });
+  const b = fitCamera({ box, aspect: 0.8, padding: 0.2 });
+  expect(b.distance).toBeGreaterThan(a.distance);
+});
+
+test('fitCamera(points)：按轮廓点精确装框，最外点恰好落在 padding 线上', () => {
+  // 两侧伸出的点离相机远近不同：盒子前表面装框会过于保守，按点算则恰好贴线
+  const points = [[-1, 1, 0], [1, 1, 0.1], [0, 0, -0.5], [0, 2, 0.2], [0.2, 1.2, 0.9]];
+  const box = { min: [-1, 0, -0.5], max: [1, 2, 0.9] };
+  const aspect = 0.8, padding = 0.1;
+  const f = fitCamera({ box, points, fovDeg: 30, aspect, padding });
+  const t = Math.tan(Math.PI / 12);
+  let worst = 0;
+  for (const [x, y, z] of points) {
+    const depth = f.position[2] - z;
+    worst = Math.max(worst, Math.abs((x - f.position[0]) / (depth * t * aspect)), Math.abs((y - f.position[1]) / (depth * t)));
+  }
+  expect(worst).toBeCloseTo(0.9, 6);
+  expect(f.distance).toBeLessThan(fitCamera({ box, fovDeg: 30, aspect, padding }).distance);
+});

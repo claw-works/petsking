@@ -24,6 +24,32 @@ export function frameCamera({ mode = 'full', minY = 0, height, headY = null, fov
   return { position: [0, centerY, distance], target: [0, centerY, 0], fov: fovDeg, distance };
 }
 
+/**
+ * 按动作包络盒取景（全身）：包络盒 = 所有动作 / 朝向下模型顶点的并集（世界坐标，角色面朝 +Z）。
+ * 高、宽两个方向都装下，四周各留 padding（占可视半幅的比例，0.1 = 每边留 10%）。
+ * 相机对准包络中心平视。aspect = 容器宽 / 高（容器尺寸变了要重新算）。
+ *   points（可选）：采样得到的轮廓点 [[x,y,z], …]。给了就逐点求「恰好落在 padding 线上」的相机距离取最大，
+ *                   精确且不保守；
+ *   只有 box：以盒子最靠近相机的一面（max.z）装框，透视下更远的部分只会更小，不会被裁（偏保守、留白偏多）。
+ * 返回 { position, target, fov, distance }，distance = 相机到角色平面 z=0 的距离（步速换算用）。
+ */
+export function fitCamera({ box, points = null, fovDeg = 30, aspect = 1, padding = 0.1 }) {
+  const [x0, y0] = box.min, [x1, y1, z1] = box.max;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const fill = 1 - padding;
+  const t = Math.tan(rad(fovDeg) / 2);
+  const kx = 1 / (fill * t * aspect), ky = 1 / (fill * t);
+  let camZ;
+  if (points && points.length) {
+    // 点 (x,y,z) 的 ndc_x = (x-cx) / ((camZ-z)·t·aspect)，要 |ndc| ≤ fill ⇒ camZ ≥ z + |x-cx|·kx（y 同理）
+    camZ = -Infinity;
+    for (const [x, y, z] of points) camZ = Math.max(camZ, z + Math.abs(x - cx) * kx, z + Math.abs(y - cy) * ky);
+  } else {
+    camZ = z1 + Math.max(((y1 - y0) / 2) * ky, ((x1 - x0) / 2) * kx);
+  }
+  return { position: [cx, cy, camZ], target: [cx, cy, 0], fov: fovDeg, distance: camZ };
+}
+
 /** 角色所在深度处，每米对应多少屏幕像素 */
 export function pxPerMeter({ fovDeg, distance, heightPx }) {
   return heightPx / (2 * distance * Math.tan(rad(fovDeg) / 2));

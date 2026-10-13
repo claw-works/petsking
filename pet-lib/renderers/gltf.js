@@ -3,6 +3,9 @@
 // 素材包契约（pet.json，路径相对 assetsDir）：
 //   model        "model.glb"
 //   camera       "full" | "bust" | { position:[x,y,z], target:[x,y,z], fov }
+//                full（默认）按「动作包络盒」取景：所有动作 × 朝向下模型顶点的并集，高宽两个方向都装下
+//   framePadding full 取景四周留白，占可视半幅的比例（默认 0.1 = 每边 10%）
+//   frameBox     { min:[x,y,z], max:[x,y,z] } 手动指定包络盒（米，世界坐标），跳过加载时的采样
 //   turnDeg      setFacing 左/右时身体转多少度（默认 70）
 //   shadow       false 关掉脚下软阴影
 //   expressions / blush / fur / springBones / gestureBones   见 _gltf-character.js / _gltf-gestures.js
@@ -25,6 +28,9 @@
 //     speed  clip 的真实行进速度 m/s（走动平移按它换算像素速度，脚不打滑）
 // three 与 GLTFLoader 通过页面 importmap（'three'、'three/addons/'）或打包器解析；全部动态 import。
 import { RendererBase, registerRenderer } from './renderer-base.js';
+
+// 动作包络盒缓存：key = 模型 URL + 采样用例。playground 反复重建同一皮肤时不必重新采样。
+const ENVELOPE_CACHE = new Map();
 
 export class GltfRenderer extends RendererBase {
   get capabilities() { return { expression: true, mouth: true, gesture: true }; }
@@ -66,7 +72,9 @@ export class GltfRenderer extends RendererBase {
     this.character.gestureLayer = this.gestures;
     this.character.onOnceEnd = () => this._onOnceEnd();
     this.scene.add(this.character.root);
-    // 用待机姿势取景（bind pose 是 T 字，包围盒偏宽）：先播待机 clip，update(0) 让 mixer 写入首帧姿势
+    // full 取景要先量动作包络盒（会改动 mixer / 朝向，所以放在播待机之前）
+    if (!this.assets.camera || this.assets.camera === 'full') this._envelope = this._loadEnvelope();
+    // 地面阴影用待机姿势定位（bind pose 是 T 字）：先播待机 clip，update(0) 让 mixer 写入首帧姿势
     const idle = this._idleSpec();
     if (idle && this.character.play(idle.clip, { once: !!idle.once, fade: 0 })) this.currentAction = idle.action;
     this.character.update(0);
@@ -131,11 +139,12 @@ export class GltfRenderer extends RendererBase {
       this.camera.aspect = cw / ch;
       this.camera.updateProjectionMatrix();
       this.webgl.setSize(cw, ch);
+      if (this._envelope) this._fitEnvelope();   // 宽高比变了，按包络盒重新装框
     });
     this._ro.observe(this.container);
   }
 
-  /** 按模型包围盒 / 头骨自动取景，或用 pet.json camera 显式指定 */
+  /** 取景：full 按动作包络盒（_fitEnvelope），bust 按头骨，或用 pet.json camera 显式指定；地面阴影对齐待机脚底 */
   _frame() {
     const THREE = this.THREE;
     const root = this.character.root;
@@ -149,6 +158,7 @@ export class GltfRenderer extends RendererBase {
     const headBone = root.getObjectByName((this.assets.gestureBones && this.assets.gestureBones.head) || 'Bip001Head');
     const headY = headBone ? headBone.getWorldPosition(new THREE.Vector3()).y : null;
     const cam = this.assets.camera;
+    if (this._envelope) { this._fitEnvelope(); return; }
     let f;
     if (cam && typeof cam === 'object') {
       const [px, py, pz] = cam.position, [tx, ty, tz] = cam.target;
@@ -156,11 +166,97 @@ export class GltfRenderer extends RendererBase {
     } else {
       f = this._math.frameCamera({ mode: cam || 'full', minY: box.min.y, height: size.y || 1.7, headY, fovDeg: 30 });
     }
+    this._applyCamera(f);
+  }
+
+  _applyCamera(f) {
     this.camera.fov = f.fov;
     this.camera.position.set(...f.position);
     this.camera.lookAt(...f.target);
     this.camera.updateProjectionMatrix();
     this._camDist = f.distance;
+  }
+
+  /** 按动作包络盒和当前容器宽高比装框（高宽两个方向都留白） */
+  _fitEnvelope() {
+    const cw = this.container.clientWidth, ch = this.container.clientHeight;
+    const aspect = cw && ch ? cw / ch : this.camera.aspect;
+    const env = this._envelope;
+    this._applyCamera(this._math.fitCamera({ box: env, points: env.points, fovDeg: 30, aspect, padding: this.assets.framePadding ?? 0.1 }));
+  }
+
+  _loadEnvelope() {
+    const fb = this.assets.frameBox;
+    if (fb && Array.isArray(fb.min) && Array.isArray(fb.max)) return fb;
+    const cases = this._envelopeCases();
+    const key = this.assets.baseUrl + this.assets.model + '|' + [...cases.keys()].join(',');
+    if (!ENVELOPE_CACHE.has(key)) ENVELOPE_CACHE.set(key, this._measureEnvelope(cases));
+    return ENVELOPE_CACHE.get(key);
+  }
+
+  /**
+   * 采样用例：actions 用到的每个 clip 按各自 yaw（没写 yaw 的按正面）；待机动作另加左右转身 ±turnDeg（setFacing）。
+   * 其它动作在手动转身状态下播放不计入包络（概率链都是正面播，走路自带 yaw），否则少见的组合会把留白撑得过大。
+   */
+  _envelopeCases() {
+    const ch = this.character;
+    const turn = this.assets.turnDeg ?? 70;
+    const idle = this._idleSpec();
+    const cases = new Map();
+    for (const v of Object.values(this.assets.actions || {})) {
+      const spec = typeof v === 'string' ? { clip: v } : v;
+      if (!spec || !ch.actions[spec.clip]) continue;
+      const yaws = spec.yaw != null ? [spec.yaw] : idle && spec.clip === idle.clip ? [0, turn, -turn] : [0];
+      for (const yaw of yaws) cases.set(spec.clip + '@' + yaw, [spec.clip, yaw]);
+    }
+    if (!cases.size) for (const clip of ch.clipNames) cases.set(clip + '@0', [clip, 0]);
+    return cases;
+  }
+
+  /**
+   * 动作包络：每个用例的 clip 逐帧采样（约每秒 2 帧，12~48 帧），取模型顶点（每个 mesh 抽 ~1000 个，
+   * 含蒙皮与 morph）的世界坐标。返回 { min, max, points }：min/max 为并集包围盒；points 为每帧每个 mesh
+   * 的左右上下四个极值点（轮廓点），fitCamera 用它精确装框。清霄约 0.5s。
+   * 会改动 mixer 与朝向，结束时停掉所有动作、朝向归零。
+   */
+  _measureEnvelope(cases) {
+    const THREE = this.THREE, ch = this.character, root = ch.root;
+    const meshes = [];
+    root.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.attributes.position) meshes.push(o); });
+    const box = new THREE.Box3(), v = new THREE.Vector3();
+    const points = [];
+    for (const [clip, yaw] of cases.values()) {
+      ch.mixer.stopAllAction();
+      const a = ch.actions[clip];
+      a.reset(); a.setEffectiveWeight(1); a.play();
+      root.rotation.y = (yaw * Math.PI) / 180;
+      const dur = a.getClip().duration || 0;
+      const n = Math.min(48, Math.max(12, Math.ceil(dur * 2)));
+      for (let i = 0; i <= n; i++) {
+        a.time = (dur * i) / n;
+        ch.mixer.update(0);
+        root.updateMatrixWorld(true);
+        for (const m of meshes) {
+          const pos = m.geometry.attributes.position;
+          const step = Math.max(1, Math.floor(pos.count / 1000));
+          let l = null, r = null, b = null, t = null;
+          for (let k = 0; k < pos.count; k += step) {
+            m.getVertexPosition(k, v).applyMatrix4(m.matrixWorld);
+            box.expandByPoint(v);
+            if (!l || v.x < l[0]) l = v.toArray();
+            if (!r || v.x > r[0]) r = v.toArray();
+            if (!b || v.y < b[1]) b = v.toArray();
+            if (!t || v.y > t[1]) t = v.toArray();
+          }
+          if (l) points.push(l, r, b, t);
+        }
+      }
+    }
+    ch.mixer.stopAllAction();
+    ch.current = null;
+    ch.currentClip = null;
+    root.rotation.y = 0;
+    return { min: box.min.toArray(), max: box.max.toArray(), points };
   }
 
   _spec(action) {
