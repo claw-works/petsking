@@ -183,3 +183,55 @@ test('未解锁 → locked，不调 provider', async () => {
   expect(await v.playAudio('a')).toEqual({ played: false, reason: 'locked' });
   expect(called).toBe(false);
 });
+
+test('{done} 为 rejected promise → tts-error，且没有未处理的 rejection', async () => {
+  const unhandled = [];
+  const onUnhandled = (e) => unhandled.push(e);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const v = new Voice({ tts: async () => ({ done: Promise.reject(new Error('boom')) }), lipsync: fakeLipsync() });
+    expect(await v.speakText('嗯')).toEqual({ played: false, reason: 'tts-error' });
+    await tick(20);
+    expect(unhandled).toEqual([]);
+  } finally { process.off('unhandledRejection', onUnhandled); }
+});
+
+test('新的 speakText 打断自出声的旧段：旧段 interrupted、调用旧 cancel、新段口型不被旧段清空', async () => {
+  const m = mouthLog();
+  let cancelled = 0;
+  const finishes = [];
+  const tts = async () => {
+    const i = finishes.length;
+    let finish;
+    const done = new Promise((r) => { finish = r; });
+    finishes.push(finish);
+    return i === 0 ? { done, cancel: () => { cancelled++; } } : { done };
+  };
+  const v = new Voice({ setMouth: m.setMouth, tts, lipsync: fakeLipsync() });
+  const p1 = v.speakText('第一句');
+  await tick(10);
+  const p2 = v.speakText('第二句');
+  expect(await p1).toEqual({ played: false, interrupted: true });
+  expect(cancelled).toBe(1);
+  const mark = m.calls.length;
+  await tick(30);
+  expect(m.calls.slice(mark).length).toBeGreaterThan(0);
+  expect(m.calls.slice(mark).every((f) => f !== null)).toBe(true);
+  finishes[1]();
+  expect(await p2).toEqual({ played: true, interrupted: false });
+  expect(m.last()).toBe(null);
+  expect(cancelled).toBe(1);   // 新段正常结束不会再触发旧的 cancel
+});
+
+test('playAudio(null/undefined) → no-src，且不打断正在说的', async () => {
+  const ls = fakeLipsync();
+  const v = new Voice({ lipsync: ls });
+  const p = v.playAudio('a.mp3');
+  await tick(5);
+  const stops = ls.stops;
+  expect(await v.playAudio(null)).toEqual({ played: false, reason: 'no-src' });
+  expect(await v.playAudio(undefined)).toEqual({ played: false, reason: 'no-src' });
+  expect(ls.stops).toBe(stops);
+  ls.plays[0].resolve();
+  expect(await p).toEqual({ played: true, interrupted: false });
+});

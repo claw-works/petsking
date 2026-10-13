@@ -101,7 +101,10 @@ export class AudioLipSync {
       const finish = () => { clearTimeout(timer); res(); };
       node.onended = finish;
       this._finish = finish;
-      timer = setTimeout(finish, (buffer.duration || 0) * 1000 + SAFETY_PAD_MS);
+      timer = setTimeout(() => {
+        try { node.stop(); } catch { /* 已停 */ }   // 兜底结束时也停节点，免得之后被 resume 的 ctx 偷偷播出来
+        finish();
+      }, (buffer.duration || 0) * 1000 + SAFETY_PAD_MS);
     });
     this.current = node;
     this._state = { peak: 0.05 };

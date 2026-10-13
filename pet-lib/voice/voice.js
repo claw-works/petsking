@@ -2,9 +2,9 @@
 //
 //   playAudio(src)   播音频（URL/Blob/ArrayBuffer/TypedArray），音频驱动口型
 //   speakText(text)  调 TTS provider（契约见 tts.js）：
-//                      返回音频 → 走音频播放；返回 { done } → 循环按字估算口型直到 done；返回 null → no-tts
+//                      返回音频 → 走音频播放；返回 { done, cancel? } → 循环按字估算口型直到 done，stop() 时调 cancel；返回 null → no-tts
 //   stop()
-// 返回值统一 { played: bool, reason?: 'locked'|'error'|'tts-error'|'no-tts'|'empty', interrupted?: bool }
+// 返回值统一 { played: bool, reason?: 'locked'|'error'|'tts-error'|'no-tts'|'no-src'|'empty', interrupted?: bool }
 //
 // 打断模型：_begin() 先 stop() 再领一个 token；任何 await 之后 token 变了就说明被打断（新一段或 stop()）。
 import { AudioLipSync } from './lipsync.js';
@@ -23,6 +23,7 @@ export class Voice {
     this._token = 0;
     this._raf = null;
     this._onStop = null;   // 当前一段的“被打断”回调，stop() 时触发
+    this._cancel = null;   // 自出声 provider 提供的 cancel，stop() 时调用
   }
 
   get unlocked() { return this.lipsync.unlocked; }
@@ -30,6 +31,7 @@ export class Voice {
 
   async playAudio(src) {
     if (!this.unlocked) return { played: false, reason: 'locked' };
+    if (src == null) return { played: false, reason: 'no-src' };   // 空音源不打断正在说的
     return this._playAudio(src, this._begin());
   }
 
@@ -63,9 +65,12 @@ export class Voice {
       console.warn('[voice] tts failed', e);
       return { played: false, reason: 'tts-error' };
     }
+    // 先吞掉 done 的 rejection，避免被打断提前返回后变成未处理的 rejection
+    if (isSelfSpeaking(res)) res.done.catch(() => {});
     if (token !== this._token) return { played: false, interrupted: true };   // 慢请求期间被 stop/打断
     if (!res) return { played: false, reason: 'no-tts' };
     if (!isSelfSpeaking(res)) return this._playAudio(res, token);
+    this._cancel = typeof res.cancel === 'function' ? res.cancel : null;
     return this._speakAlong(text, res.done, token);
   }
 
@@ -83,6 +88,7 @@ export class Voice {
     await Promise.race([done.then(() => {}, () => { failed = true; }), stopped]);
     if (token !== this._token) return { played: false, interrupted: true };
     this._onStop = null;
+    this._cancel = null;
     this._stopPump();
     this.setMouth(null);
     return failed ? { played: false, reason: 'tts-error' } : { played: true, interrupted: false };
@@ -93,6 +99,9 @@ export class Voice {
     this._stopPump();
     this.lipsync.stop();
     cancelBrowserTts();
+    const cancel = this._cancel;
+    this._cancel = null;
+    if (cancel) { try { cancel(); } catch { /* provider 自己的取消失败不影响收尾 */ } }
     this.setMouth(null);
     const onStop = this._onStop;
     this._onStop = null;
@@ -101,12 +110,11 @@ export class Voice {
 
   _begin() { this.stop(); return this._token; }
 
-  /** 每帧调 frameFn：返回口型帧（或 null=闭嘴）推给渲染器；返回 false 结束 */
+  /** 每帧调 frameFn：返回口型帧（或 null=闭嘴）推给渲染器 */
   _pump(frameFn) {
     this._stopPump();
     const step = () => {
       const f = frameFn();
-      if (f === false) { this._stopPump(); return; }
       this.setMouth(f);
       this._raf = requestAnimationFrame(step);
     };

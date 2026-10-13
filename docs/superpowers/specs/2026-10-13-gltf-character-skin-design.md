@@ -123,8 +123,10 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
 - `tts.js` — provider 接口与默认实现：
 
   ```js
-  // provider: (text, { lang, voice }) => Promise<Blob | ArrayBuffer | string(url) | null>
-  //   返回音频 → 走 lipsync 音频口型；返回 null → 表示 provider 自己出声（如浏览器 TTS），走按字估算口型
+  // provider: (text, { lang }) => Promise<音频 | { done, cancel? } | null>
+  //   返回音频（Blob / ArrayBuffer / typed array / url）→ 走 lipsync 音频口型
+  //   返回 { done, cancel? } → provider 自己出声（如浏览器 TTS），走按字估算口型；被打断时调 cancel
+  //   返回 null → 无可用 TTS，返回 { played: false, reason: 'no-tts' }
   export const browserTts = async (text, { lang = 'zh-CN' } = {}) => { /* speechSynthesis.speak */ return null; };
   ```
 
