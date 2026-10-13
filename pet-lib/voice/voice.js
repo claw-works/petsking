@@ -45,6 +45,7 @@ export class Voice {
       return { played: true, interrupted: token !== this._token };
     } catch (e) {
       if (token !== this._token) return { played: false, interrupted: true };
+      if (e && e.code === 'closed') return { played: false, interrupted: true };   // 销毁后在飞的加载：算被打断
       if (e && e.code === 'locked') return { played: false, reason: 'locked' };
       console.warn('[voice] play failed', e);
       return { played: false, reason: 'error' };

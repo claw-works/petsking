@@ -24,7 +24,16 @@
 //   _manualLook 手动 setExpression / setGesture：一直保持，传 null / 'neutral' 清除
 //   _reactLook  意图表演 perform：holdMs（默认 3s）后清除
 //   _stateLook  驱动状态 meta：每个驱动动作替换（带表情/手势就设置，不带就清空）
+//               例外：点击（meta.kind === 'CLICK'）的表情/手势进意图层（同样 holdMs 默认 3s），不动状态层
 // 表情：说话 > 手动 > 意图 > 状态 > neutral；手势：手动 > 意图 > 状态 > 无（说话不碰手势）。
+// 说话层只来自台词自身的 expression（line.expression）或调用方显式传的 opts.expression；
+// 状态 / 意图的表情不会传给 voice()，免得升格为说话层、遮住状态/意图层；台词表情为 'neutral' 视为未设置。
+// 一次型手势（nod / shake）重复触发：每次「新设置」手势的层都带一个递增 seq（_gestureSeq），
+// _refreshLook 比较的是 (手势名, 胜出层的 seq)，同名但是新一次请求也会重新下发给渲染器。
+// 已知取舍：_syncRendererLook（换渲染器）会重新下发当前手势，已播完的一次型手势可能重播一次，可接受。
+//
+// 说话事件：被更新的一段取代的说话（token 过期）不发 speech:end —— 新的一段已经发过 start，
+// 否则监听方会先收到旧段的 end 又错乱地关掉新段。
 
 import { createRenderer } from './renderers/renderer-base.js';
 import { createDriver } from './core/driver-base.js';
@@ -69,6 +78,8 @@ export class DeskPet {
     this._stateLook = null;
     this._appliedExpr = undefined;    // 最近一次下发给渲染器的值（undefined = 尚未下发）
     this._appliedGesture = undefined;
+    this._appliedGestureSeq = undefined;
+    this._gestureSeq = 0;             // 每次新设置手势就 +1，用于重复触发同名一次型手势
     this._talkToken = 0;
     this._destroyed = false;
     this.facing = 'front';
@@ -162,15 +173,35 @@ export class DeskPet {
     this._applyMove(action);
     this._applyLook(meta);
     // 点击触发的台词是用户主动交互：不受、也不占用自动语音冷却
-    if (meta.voice) this.voice(meta.voice, { auto: meta.kind !== 'CLICK', expression: meta.expression });
+    if (meta.voice) this.voice(meta.voice, { auto: meta.kind !== 'CLICK' });   // 不传 meta.expression：状态/点击表情走各自的层
     this._emit('action', { action, meta });
     if (meta.kind) this._emit('state', { state: meta.kind, action });
   }
 
-  /** 状态层：驱动动作带表情/手势就设置，不带就清空（离开带表情的状态不残留）；不影响意图/说话层 */
+  /** 生成一个外观层对象；带手势时分配新的 seq（让重复的同名一次型手势也能重新触发） */
+  _mkLook(expression, gesture) {
+    return { expression: expression || null, gesture: gesture || null, seq: gesture ? ++this._gestureSeq : 0 };
+  }
+
+  /** 意图层：设置并在 holdMs 后清除（只清自己，回落到状态层） */
+  _setReact(expression, gesture, holdMs) {
+    this._reactLook = this._mkLook(expression, gesture);
+    clearTimeout(this._reactT);
+    this._reactT = setTimeout(() => { this._reactLook = null; this._refreshLook(); }, holdMs ?? 3000);
+    this._refreshLook();
+  }
+
+  /**
+   * 状态层：驱动动作带表情/手势就设置，不带就清空（离开带表情的状态不残留）；不影响意图/说话层。
+   * 点击（CLICK）是一次性互动：进意图层并保持 holdMs，状态层原样保留（点完回到原状态外观）。
+   */
   _applyLook(meta) {
+    if (meta.kind === 'CLICK') {
+      if (meta.expression || meta.gesture) this._setReact(meta.expression, meta.gesture, meta.holdMs);
+      return;
+    }
     this._stateLook = (meta.expression || meta.gesture)
-      ? { expression: meta.expression || null, gesture: meta.gesture || null }
+      ? this._mkLook(meta.expression, meta.gesture)
       : null;
     this._refreshLook();
   }
@@ -181,14 +212,22 @@ export class DeskPet {
     const { expression, gesture } = resolveLook({
       talk: this._talkLook, manual: this._manualLook, react: this._reactLook, state: this._stateLook,
     });
+    // 胜出手势所在层的 seq：同名手势被重新设置（seq 变）也要重新下发
+    const win = gesture ? [this._manualLook, this._reactLook, this._stateLook].find((l) => l && l.gesture) : null;
+    const seq = win ? win.seq : 0;
     if (expression !== this._appliedExpr) { this._appliedExpr = expression; this.renderer.setExpression(expression); }
-    if (gesture !== this._appliedGesture) { this._appliedGesture = gesture; this.renderer.setGesture(gesture); }
+    if (gesture !== this._appliedGesture || seq !== this._appliedGestureSeq) {
+      this._appliedGesture = gesture;
+      this._appliedGestureSeq = seq;
+      this.renderer.setGesture(gesture);
+    }
   }
 
   /** 换渲染器后强制重新下发当前外观（口型由 Voice 闭包读 this.renderer，自动跟随新渲染器） */
   _syncRendererLook() {
     this._appliedExpr = undefined;
     this._appliedGesture = undefined;
+    this._appliedGestureSeq = undefined;
     this._refreshLook();
   }
 
@@ -292,13 +331,10 @@ export class DeskPet {
     if (!perf || this._destroyed) return this;
     if (perf.action) this.play(perf.action, { loop: false, kind });
     if (perf.expression || perf.gesture) {
-      this._reactLook = { expression: perf.expression || null, gesture: perf.gesture || null };
-      clearTimeout(this._reactT);
-      this._reactT = setTimeout(() => { this._reactLook = null; this._refreshLook(); }, perf.holdMs ?? 3000);
-      this._refreshLook();
+      this._setReact(perf.expression, perf.gesture, perf.holdMs);
     }
     if (perf.voice && !silent) {
-      this.voice(perf.voice, { auto: true, expression: perf.expression }).then((res) => {
+      this.voice(perf.voice, { auto: true }).then((res) => {
         if (this._destroyed || !perf.say || !res || res.played) return;
         if (['cooldown', 'unknown-line', 'no-src'].includes(res.reason)) this.say(perf.say);
       });
@@ -319,7 +355,7 @@ export class DeskPet {
 
   /** 手动手势（手动层）：一直保持；传 null 清除，回落到意图 / 状态层 */
   setGesture(name) {
-    this._manualLook = { ...(this._manualLook || {}), gesture: name || null };
+    this._manualLook = { ...(this._manualLook || {}), gesture: name || null, seq: name ? ++this._gestureSeq : 0 };
     this._refreshLook();
     return this;
   }
@@ -365,13 +401,15 @@ export class DeskPet {
     if (!this.voiceEnabled) return { played: false, reason: 'disabled' };
     const tok = ++this._talkToken;
     clearTimeout(this._talkLookT);
-    this._talkLook = expression ? { expression } : null;
+    // 'neutral' 视为未设置：否则说话层会遮住状态/意图层的表情
+    this._talkLook = expression && expression !== 'neutral' ? { expression } : null;
     this._refreshLook();
     this._emit('speech', { phase: 'start', text, lineId });
     const res = await run();
     if (this._destroyed) return { played: false, reason: 'destroyed' };
+    if (tok !== this._talkToken) return res;   // 已被更新的一段取代：不发 end（新的一段已发过 start）
     this._emit('speech', { phase: 'end', text, lineId, ...res });
-    if (tok === this._talkToken && this._talkLook) {
+    if (this._talkLook) {
       this._talkLookT = setTimeout(() => {
         if (tok !== this._talkToken) return;
         this._talkLook = null;

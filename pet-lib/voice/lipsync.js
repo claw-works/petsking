@@ -20,6 +20,7 @@ export class AudioLipSync {
     this.current = null;
     this._finish = null;      // 结束当前这段（resolve 它的 done）
     this._gen = 0;
+    this._closed = false;     // close() 之后为 true，终态：不再创建 AudioContext
     this._state = { peak: 0.05 };
   }
 
@@ -32,9 +33,15 @@ export class AudioLipSync {
     return ua ? ua.hasBeenActive : true;
   }
 
-  unlock() { this._ensure(); }
+  unlock() { if (!this._closed) this._ensure(); }   // 关闭后静默忽略
 
   _ensure() {
+    if (this._closed) {
+      // 关闭后仍在飞的 load / decode 会走到这里：抛错而不是重新建 ctx（否则泄漏）
+      const err = new Error('AudioLipSync closed');
+      err.code = 'closed';
+      throw err;
+    }
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.analyser = this.ctx.createAnalyser();
@@ -124,8 +131,9 @@ export class AudioLipSync {
     if (finish) finish();
   }
 
-  /** 彻底释放：停播 + 关闭 AudioContext（之后再 play 会重新建一个）。宠物销毁时调用 */
+  /** 彻底释放：停播 + 关闭 AudioContext。关闭是终态：之后 play/load/unlock 会抛 code='closed'，不会再建 AudioContext。宠物销毁时调用 */
   close() {
+    this._closed = true;
     this.stop();
     const ctx = this.ctx;
     this.ctx = null;

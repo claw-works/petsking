@@ -177,3 +177,22 @@ test('close：停掉正在播的、关闭 AudioContext 并置空', async () => {
   ls.close();   // 重复调用无副作用
   expect(closed).toBe(1);
 });
+
+test('close 之后在飞的加载完成：不再新建 AudioContext，play 正常 settle', async () => {
+  let created = 0;
+  globalThis.AudioContext = class extends FakeCtx { constructor() { super(); created++; } };
+  let release;
+  globalThis.fetch = () => new Promise((res) => { release = () => res({ ok: true, arrayBuffer: async () => new ArrayBuffer(4) }); });
+  const ls = new AudioLipSync();
+  const p = ls.play('/slow.mp3');
+  await tick(5);
+  expect(created).toBe(0);   // 还在 fetch，尚未建 ctx
+  ls.close();
+  release();
+  const settled = await Promise.race([p.then(() => 'ok', (e) => e.code), tick(200).then(() => 'hang')]);
+  expect(settled).toBe('closed');
+  expect(created).toBe(0);
+  expect(ls.ctx).toBe(null);
+  ls.unlock();   // 关闭后 unlock 也不建
+  expect(created).toBe(0);
+});
