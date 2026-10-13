@@ -7,7 +7,7 @@
 //   shadow       false 关掉脚下软阴影
 //   expressions / blush / fur / springBones / gestureBones   见 _gltf-character.js / _gltf-gestures.js
 //   actions[动作] = "ClipName" | { clip, once?, yaw?, speed?, speedScale? }
-//     once   只播一遍，播完淡回 idle 动作的 clip
+//     once   只播一遍，播完淡回待机 clip（idle 动作 → idleActions[0] → actions 里第一个非 once 动作）
 //     yaw    播这个动作时身体朝向（度，正 = 朝屏幕右）；不写则跟随 setFacing
 //     speed  clip 的真实行进速度 m/s（走动平移按它换算像素速度，脚不打滑）
 // three 与 GLTFLoader 通过页面 importmap（'three'、'three/addons/'）或打包器解析；全部动态 import。
@@ -24,6 +24,7 @@ export class GltfRenderer extends RendererBase {
       import('./_gltf-gestures.js'),
       import('./gltf-math.js'),
     ]);
+    if (this._destroyed) return; // import 期间已销毁：还没建任何资源
     this.THREE = THREE;
     this._math = math;
     this._dispose = disposeObject;
@@ -34,19 +35,24 @@ export class GltfRenderer extends RendererBase {
     try {
       gltf = await new GLTFLoader().loadAsync(this.assets.baseUrl + this.assets.model, onProgress);
     } catch (e) {
+      if (this._destroyed) return;
       this._showError('模型加载失败：' + (e && e.message ? e.message : e));
       throw e;
     } finally {
       this._hideProgress();
     }
-    if (this._destroyed) { disposeObject(gltf.scene); return; }
+    if (this._destroyed) { disposeObject(gltf.scene); this.destroy(); return; }
 
     const a = this.assets;
     this.character = new Character(gltf, { expressions: a.expressions, blush: a.blush, fur: a.fur, springBones: a.springBones });
     this.gestures = new GestureLayer(this.character.root, a.gestureBones);
-    this.character.gestureHook = (dt) => this.gestures.update(dt);
+    this.character.gestureLayer = this.gestures;
     this.character.onOnceEnd = () => this._onOnceEnd();
     this.scene.add(this.character.root);
+    // 用待机姿势取景（bind pose 是 T 字，包围盒偏宽）：先播待机 clip，update(0) 让 mixer 写入首帧姿势
+    const idle = this._idleSpec();
+    if (idle && this.character.play(idle.clip, { once: !!idle.once, fade: 0 })) this.currentAction = idle.action;
+    this.character.update(0);
     this._frame();
 
     this._clock = new THREE.Clock();
@@ -97,6 +103,7 @@ export class GltfRenderer extends RendererBase {
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
       this.scene.add(ground);
+      this._ground = ground; // 高度在 _frame() 里对齐到脚底
     }
 
     // 容器尺寸变化（playground setSize、窗口缩放）
@@ -114,10 +121,10 @@ export class GltfRenderer extends RendererBase {
   _frame() {
     const THREE = this.THREE;
     const root = this.character.root;
-    this.character.update(0);
     root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root);
     const size = box.getSize(new THREE.Vector3());
+    if (this._ground && isFinite(box.min.y)) this._ground.position.y = box.min.y;
     const headBone = root.getObjectByName((this.assets.gestureBones && this.assets.gestureBones.head) || 'Bip001Head');
     const headY = headBone ? headBone.getWorldPosition(new THREE.Vector3()).y : null;
     const cam = this.assets.camera;
@@ -141,6 +148,21 @@ export class GltfRenderer extends RendererBase {
     return typeof v === 'string' ? { clip: v } : v;
   }
 
+  /** 待机动作 spec（附带 action 名）：idle → idleActions[0] → actions 里第一个非 once 动作；都没有返回 null */
+  _idleSpec() {
+    const list = this.assets.idleActions;
+    const names = ['idle', ...(Array.isArray(list) && list.length ? [list[0]] : [])];
+    for (const name of names) {
+      const s = this._spec(name);
+      if (s) return { ...s, action: name };
+    }
+    for (const name of Object.keys(this.assets.actions || {})) {
+      const s = this._spec(name);
+      if (s && !s.once) return { ...s, action: name };
+    }
+    return null;
+  }
+
   _facingYawDeg() {
     const t = this.assets.turnDeg ?? 70;
     return this.facing === 'left' ? -t : this.facing === 'right' ? t : 0;
@@ -150,16 +172,25 @@ export class GltfRenderer extends RendererBase {
     if (!this.character) return;
     const spec = this._spec(action);
     if (!spec) return; // 本皮肤没有这个动作（如通用意图表里的 dance）：忽略
+    if (!this.character.play(spec.clip, { once: !!spec.once })) {
+      // pet.json 指向的 clip 在 GLB 里不存在：每个 clip 名只警告一次，保持当前动作与朝向
+      this._missingClips = this._missingClips || new Set();
+      if (!this._missingClips.has(spec.clip)) {
+        this._missingClips.add(spec.clip);
+        console.warn('[gltf] clip not found in model:', spec.clip, '(action ' + action + ')');
+      }
+      return;
+    }
     this.currentAction = action;
-    this.character.play(spec.clip, { once: !!spec.once });
     this.character.setYaw(((spec.yaw ?? this._facingYawDeg()) * Math.PI) / 180);
   }
 
   _onOnceEnd() {
-    const idle = this._spec('idle');
-    if (idle) this.character.play(idle.clip, { fade: 0.5 });
-    this.character.setYaw((this._facingYawDeg() * Math.PI) / 180);
-    this.currentAction = 'idle';
+    const idle = this._idleSpec();
+    if (idle && !idle.once && this.character.play(idle.clip, { fade: 0.5 })) {
+      this.character.setYaw(((idle.yaw ?? this._facingYawDeg()) * Math.PI) / 180);
+      this.currentAction = idle.action;
+    } // 没有可回的待机 clip：停在末帧，只通知播完
     if (this._onEnded) this._onEnded();
   }
 
@@ -204,7 +235,8 @@ export class GltfRenderer extends RendererBase {
     el.appendChild(bar);
     this.container.appendChild(el);
     this._progressEl = el;
-    return (e) => { if (e.total) bar.style.width = Math.round((e.loaded / e.total) * 100) + '%'; };
+    // 服务端没给 Content-Length（total=0）时显示固定 30% 的不确定态，而不是一直停在 0
+    return (e) => { bar.style.width = e.total ? Math.round((e.loaded / e.total) * 100) + '%' : '30%'; };
   }
 
   _hideProgress() {
@@ -219,15 +251,32 @@ export class GltfRenderer extends RendererBase {
     this.container.appendChild(el);
   }
 
+  /** 可重复调用：挂载中途销毁时 mount() 会在模型加载完后再调一次做完整清理 */
   destroy() {
     this._destroyed = true;
-    if (this._raf) cancelAnimationFrame(this._raf);
-    if (this._ro) this._ro.disconnect();
+    if (this._raf) { cancelAnimationFrame(this._raf); this._raf = null; }
+    if (this._ro) { this._ro.disconnect(); this._ro = null; }
     this._hideProgress();
-    if (this.character && this._dispose) this._dispose(this.character.root);
+    if (this.character) {
+      const c = this.character;
+      this.character = null;
+      this.gestures = null;
+      c.mixer.stopAllAction();
+      c.mixer.uncacheRoot(c.root);
+      if (this.scene) this.scene.remove(c.root);
+      if (this._dispose) this._dispose(c.root);
+    }
+    if (this._ground) {
+      this._ground.geometry.dispose();
+      this._ground.material.dispose();
+      this._ground = null;
+    }
     if (this.webgl) {
-      this.webgl.dispose();
-      this.webgl.domElement.remove();
+      const r = this.webgl;
+      this.webgl = null;
+      r.forceContextLoss();
+      r.dispose();
+      r.domElement.remove();
     }
   }
 }

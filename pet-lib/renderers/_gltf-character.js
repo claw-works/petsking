@@ -74,7 +74,7 @@ export class Character {
     this.current = null;
     this.currentClip = null;
     this.onOnceEnd = null;    // (clipName) => void，一次型 clip 播完
-    this.gestureHook = null;  // (dt) => void，渲染器挂手势层（mixer 之后、弹簧骨骼之前）
+    this.gestureLayer = null; // { restore(), update(dt) }，渲染器挂手势层（mixer 之后、弹簧骨骼之前叠加）
     this.mixer.addEventListener('finished', (e) => {
       if (e.action === this.current && this.onOnceEnd) this.onOnceEnd(this.currentClip);
     });
@@ -107,7 +107,8 @@ export class Character {
   play(name, { once = false, fade = 0.25 } = {}) {
     const next = this.actions[name];
     if (!next) return false;
-    if (next === this.current && !once) return true;
+    // 已在循环播放就不打断；一次型播完被 clamp 暂停的同一 clip 再要求循环时要重新开始
+    if (next === this.current && !once && next.loop === THREE.LoopRepeat && next.isRunning()) return true;
     next.reset();
     next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
     next.clampWhenFinished = once;
@@ -247,20 +248,23 @@ export class Character {
   }
 
   update(dt) {
+    // 先撤掉上一帧的程序化叠加（mixer 不保证每帧重写骨骼），倒序：弹簧最后叠加、最先还原
     this.springs.restore();
+    if (this.gestureLayer) this.gestureLayer.restore();
     this.mixer.update(dt);
     this._updateYaw(dt);
-    if (this.gestureHook) this.gestureHook(dt);
+    if (this.gestureLayer) this.gestureLayer.update(dt);
     this.springs.update(dt);
     this._updateFace(dt);
     this._updateBlink(dt);
   }
 }
 
-/** 释放一棵对象树的 geometry / material / texture */
+/** 释放一棵对象树的 geometry / material / texture / 骨骼纹理 */
 export function disposeObject(root) {
   root.traverse((o) => {
     if (!o.isMesh) return;
+    if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose();
     o.geometry?.dispose();
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     for (const m of mats) {
