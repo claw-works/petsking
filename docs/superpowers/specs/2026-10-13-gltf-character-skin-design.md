@@ -74,8 +74,8 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
 "actions": {
   "idle":       "Stand2",
   "fidget-1":   { "clip": "Stand1_Action01", "once": true },   // 播一遍回 idle clip，并触发 onEnded
-  "walk-left":  { "clip": "Walk_F", "yaw": -90 },              // 身体转向（度）
-  "walk-right": { "clip": "Walk_F", "yaw": 90 },
+  "walk-left":  { "clip": "Walk_F", "yaw": -70, "speed": 1.011 },   // 身体转向（度）
+  "walk-right": { "clip": "Walk_F", "yaw": 70,  "speed": 1.011 },
   "run":        "Run_F"
 }
 ```
@@ -84,12 +84,12 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
   （概率链对所有动作都发 `loop:true`，待机小动作循环十几秒会很怪，所以由素材声明决定。）
 - 禁用 Character 内部的 idle director（`idleVariants` 置空），待机小动作由 chain 驱动的 idle 池调度，与 pet-lib 驱动模型一致。
 - **左右走 = 转模型，不转镜头**：灯光固定在世界空间，转镜头会让侧面光影跳变；镜头不动则待机/走路取景一致。
-  - `setFacing('left'|'right')` → 身体 yaw ∓`turnDeg`（pet.json `walk.turnDeg`，默认 70°，3/4 侧身，脸仍可见），沿用
+  - `setFacing('left'|'right')` → 身体 yaw ∓`turnDeg`（pet.json 顶层 `turnDeg`，默认 70°，3/4 侧身，脸仍可见），沿用
     Character 现有的平滑转身（`_targetYaw`，约 0.2s）；`front` → 0。
-  - 走动动作（`walk.left`/`walk.right`）开始时 DeskPet 先调 `renderer.setFacing`，结束（切到非走动作）时转回 `front`。
+  - 走动动作通过自身 `yaw`（`walk-left: -70` / `walk-right: 70`）转身，无需 DeskPet 调 `setFacing`；`setFacing` 仅用于手动朝向，`turnDeg` 是它的顶层配置。
   - **步速匹配**：渲染器提供 `getWalkSpeedPx(action)`：clip 的 m/s（`locomotion` 配置，Walk_F = 1.011）× 每米像素数
     （由相机 fov、相机到角色距离和容器高度算出）× sin(turnDeg)（斜向走时屏幕上只看到水平分量）。
-    DeskPet `_startMove` 优先用它，渲染器不提供时回落 `walk.speed`。若实测脚步仍有滑动，`walk.speedScale` 可微调。
+    DeskPet `_startMove` 优先用它，渲染器不提供时回落 `walk.speed`。若实测脚步仍有滑动，动作上的 `speedScale` 可微调。
 
 **头部小动作层（gesture）**：程序化叠加在骨骼动画之上，让各 Agent 状态在身体上也有区分，无需新 clip。
 
@@ -106,6 +106,8 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
   | `lookDown` | 低头并保持 | 出错、难过 |
   | `lean` | 上身前倾并保持（Spine2 pitch + 头回正） | 等用户、关注 |
 
+- **先还原再叠加（累积修复）**：clip 只有两个相同关键帧时 mixer 不会每帧重写骨骼，叠加偏移会逐帧累积。因此 `update()` 记下被改骨骼的原始 quaternion，
+  Character 在下一帧 `mixer.update()` 之前先调 `restore()` 还原，再由 `update()` 叠加；手势结束后也不残留。
 - 持续型（tilt/lookUp/lookDown/lean）一直保持到下一个 gesture 或 `setGesture(null)`；一次型（nod/shake）播完自动归零。
 - 骨骼名可在 pet.json `gestureBones: { head, neck, spine }` 覆盖，默认 Bip001 命名；找不到骨骼则该手势静默跳过。
 - 渲染器接口：`setGesture(name | null)`、`listGestures()`；`capabilities.gesture = true`。
@@ -127,8 +129,10 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
   //   返回音频（Blob / ArrayBuffer / typed array / url）→ 走 lipsync 音频口型
   //   返回 { done, cancel? } → provider 自己出声（如浏览器 TTS），走按字估算口型；被打断时调 cancel
   //   返回 null → 无可用 TTS，返回 { played: false, reason: 'no-tts' }
-  export const browserTts = async (text, { lang = 'zh-CN' } = {}) => { /* speechSynthesis.speak */ return null; };
+  // 默认 browserTts 返回 { done, cancel }（speechSynthesis 自己出声，库估算口型直到 done）
   ```
+
+  `voice()/speak()` 的结果为 `{ played, reason?, interrupted? }`，`reason` ∈ locked / error / tts-error / no-tts / no-src / empty / cooldown / unknown-line / disabled / destroyed。
 
 - `voice.js` — `Voice` 类，DeskPet 持有一个实例：
   - 每帧把 lipsync 特征或 viseme 时间线推给 `renderer.setMouth()`（自己的 RAF，只在说话时运行）。
@@ -141,7 +145,7 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
 | 方法 | 说明 |
 |---|---|
 | `pet.setExpression(name)` | 转发渲染器 |
-| `pet.voice(lineId, { expression? })` | 播预录台词：音频 + 口型 + 气泡（台词文字）+ 台词自带表情，说完 0.7s 恢复原表情。返回 Promise |
+| `pet.voice(lineId, { expression? })` | 播预录台词：音频 + 口型 + 气泡（台词文字）+ 台词自带表情（进说话层），说完 0.7s 清除。返回 Promise |
 | `pet.speak(text, { expression? })` | 任意文字：调 TTS provider → 音频口型或估算口型 + 气泡。返回 Promise |
 | `pet.stopSpeak()` | 停止当前语音 |
 | `pet.on('speech', cb)` | `{ phase: 'start' \| 'end', text, lineId? }` |
@@ -153,7 +157,7 @@ voice: {
   enabled: true,          // 默认 true；false 时 voice()/speak() 只冒泡
   tts: browserTts,        // 可插拔 provider
   lang: 'zh-CN',
-  cooldownMs: 8000,       // 状态机/意图触发的语音冷却（手动调用不受限）
+  cooldownMs: 8000,       // 状态机/意图触发的语音冷却（手动调用与点击语音不受限）
 }
 ```
 
@@ -178,7 +182,13 @@ voice: {
 - StateDriver / ChainDriver 用它解析，`_emit(action, { ...meta, expression, gesture, voice })`。
 - AgentBridge.reactTo 用它解析，然后调 `pet.perform(perf, meta)`。
 - `DeskPet.perform(perf, meta)`（新，内部也给 onAction 用）：播动作 → 有 `expression` 则切表情 → 有 `gesture` 则 `setGesture` → 有 `voice` 则在冷却外 `pet.voice()`。
-- 离开某状态时，如果该状态设过表情 / 持续型手势，恢复 `neutral` / `setGesture(null)`（不残留）。
+- **表情 / 手势分层解析**（`pet-lib/core/look.js`，纯函数 `resolveLook`）：不再由各处 save/restore，而是每个来源只写自己那一层，统一解析后下发（结果变化才下发）：
+  - 表情：talk（台词自身表情，`neutral` 视为未设置）> manual（`setExpression`，传 `'neutral'` 清除）> react（意图/点击，`holdMs` 默认 3s）> state（驱动状态）> `neutral`
+  - 手势：manual（`setGesture`，传 `null` 清除）> react > state；说话不碰手势。
+  - 点击的表情/手势进 react 层，不动 state 层；离开状态时 state 层随下一个驱动动作替换，不残留。
+- **概率链**：`chain.playMs` 可为数字、函数或 `{ "<action>": ms, "default": ms }`（待机小动作 clip 长达十几~四十几秒，按动作声明）；
+  点击/意图表演调用 `driver.hold()` 让链条让路，避免反应刚开始就被覆盖；走动走到屏幕边缘时立即触发下一次挑选。
+- `aspect`（pet.json 顶层）控制舞台高度，由 config 透传给渲染器 / 布局。
 
 ### 4. 清霄素材包 `pets/qingxiao/`
 
