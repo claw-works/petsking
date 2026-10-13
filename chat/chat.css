@@ -96,6 +96,12 @@ a { color: inherit; text-decoration: none; }
   background: var(--card); color: var(--fg); font-size: 14px;
 }
 
+.mute-btn {
+  padding: 6px 14px; border-radius: 9px; border: 1px solid var(--line-hi);
+  background: var(--card); color: var(--muted); font-size: 13px; cursor: pointer;
+}
+.mute-btn:hover { color: var(--fg); background: var(--card-hi); }
+
 @media (max-width: 860px) {
   .chat-layout { flex-direction: column; height: auto; min-height: calc(100vh - 60px); }
   .chat-col { border-right: none; border-bottom: 1px solid var(--line); }

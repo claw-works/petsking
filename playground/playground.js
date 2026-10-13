@@ -46,6 +46,9 @@ async function rebuild() {
     pet.on('click', () => log('👆 click'));
     pet.setFacing(document.getElementById('sel-facing').value);
     log('已加载 ' + petId + ' / ' + renderer + ' / ' + driver);
+    // 只记录没能出声的情况（被锁、冷却、无 TTS、已关闭等）
+    pet.on('speech', ({ phase, text, reason, played }) => { if (phase === 'end' && played === false && reason) log('🔇 未出声: ' + reason + ' · ' + text); });
+    renderFaceControls();
   } catch (e) {
     log('❌ 创建失败: ' + e.message);
     mount.innerHTML = '<div style="color:#ff9db0;padding:20px;font-size:13px">创建失败：' + e.message + '</div>';
@@ -205,6 +208,37 @@ function renderIntents() {
   });
 }
 
+// —— 表情 / 头部小动作 / 语音台词：按渲染器能力与素材包语音包显示 ——
+function fillRow(sectionId, rowId, items, onClick) {
+  const sec = document.getElementById(sectionId);
+  const row = document.getElementById(rowId);
+  row.innerHTML = '';
+  sec.style.display = items.length ? '' : 'none';
+  items.forEach(({ id, label, title }) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (title) b.title = title;
+    b.addEventListener('click', () => onClick(id));
+    row.appendChild(b);
+  });
+}
+
+async function renderFaceControls() {
+  if (!pet) return;
+  const r = pet.renderer;
+  const caps = (r && r.capabilities) || {};
+  fillRow('expr-section', 'expr-row',
+    caps.expression ? r.listExpressions().map((e) => ({ id: e.id, label: e.label })) : [],
+    (id) => { manualHold(); pet.setExpression(id); log('表情: ' + id); });
+  fillRow('gesture-section', 'gesture-row',
+    caps.gesture ? [...r.listGestures().map((g) => ({ id: g, label: g })), { id: null, label: '清除' }] : [],
+    (id) => { manualHold(); pet.setGesture(id); log('手势: ' + (id || '清除')); });
+  const pack = await pet.voicePack();
+  fillRow('voice-section', 'voice-row',
+    pack ? pack.lines.map((l) => ({ id: l.id, label: l.label || l.id, title: l.text })) : [],
+    async (id) => { const res = await pet.voice(id); log('语音: ' + id + (res.played ? '' : ' ✗ ' + res.reason)); });
+}
+
 function bindControls() {
   const sel = document.getElementById('sel-renderer');
   // 只列该 pet 支持的渲染器
@@ -242,6 +276,12 @@ function bindControls() {
       pet.feed(ev); log('feed: ' + ev.type);
     });
   });
+
+  const speakInput = document.getElementById('speak-input');
+  const doSpeak = () => { if (pet && speakInput.value.trim()) { pet.speak(speakInput.value.trim()); log('说: ' + speakInput.value.trim()); } };
+  document.getElementById('speak-btn').addEventListener('click', doSpeak);
+  speakInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSpeak(); });
+  document.getElementById('speak-stop').addEventListener('click', () => { if (pet) pet.stopSpeak(); });
 
   bindViewControls();
 }

@@ -9,6 +9,10 @@ const petTitle = document.getElementById('pet-title');
 const chatLog = document.getElementById('chat-log');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
+const MUTE_KEY = 'petsking_muted';
+const muteBtn = document.getElementById('mute-btn');
+let muted = localStorage.getItem(MUTE_KEY) === '1';
+let hadText = false;   // 本轮是否收到过真实回复文字
 
 let pet = null;
 let ws = null;
@@ -24,15 +28,17 @@ function goToLogin() {
 
 async function loadPetName() {
   let name = PET_ID;
+  let manifest = null;
   try {
     const res = await fetch(`../pets/${PET_ID}/pet.json`);
-    const manifest = await res.json();
+    manifest = await res.json();
     if (manifest.meta && manifest.meta.name) name = manifest.meta.name;
   } catch {
     // 拿不到就用 id 兜底，不影响后续流程
   }
   document.title = name + ' · 陪伴聊天';
   petTitle.textContent = name;
+  return manifest;
 }
 
 async function loadHistory(token) {
@@ -61,20 +67,34 @@ function appendMessage(role, text) {
   return el;
 }
 
-async function mountPet() {
+async function mountPet(manifest) {
+  const aspect = (manifest && (manifest.aspect || (manifest.geometry && manifest.geometry.aspect))) || 1;
   pet = await createPet({
     pet: PET_ID,
     petsBaseUrl: '../pets/',
-    renderer: 'webm',
     driver: 'chain',
     container: '#pet-mount',
     corner: 'center',
-    size: 360,
+    size: aspect < 1 ? Math.round(400 * aspect) : 360,   // 竖长的 3D 角色按 400px 高度算宽
     draggable: false,
     ai: { enabled: true },
     autoStart: true,
   });
+  applyMute();
 }
+
+function applyMute() {
+  muteBtn.textContent = muted ? '🔇 已静音' : '🔊 朗读回复';
+  if (!pet) return;
+  pet.voiceEnabled = !muted;
+  if (muted) pet.stopSpeak();
+}
+
+muteBtn.addEventListener('click', () => {
+  muted = !muted;
+  localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+  applyMute();
+});
 
 function connectWs(token) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -89,14 +109,21 @@ function connectWs(token) {
     if (msg.type === 'text_delta') {
       if (!assistantBubble) assistantBubble = appendMessage('assistant', '');
       assistantBubble.textContent += msg.delta;
+      hadText = true;
       chatLog.scrollTop = chatLog.scrollHeight;
     } else if (msg.type === 'action') {
-      if (pet && pet.bridge) pet.bridge.reactTo(msg.intent);
+      // 回复会被朗读时，意图自带的台词语音跳过，避免两段语音叠在一起
+      if (pet) pet.react(msg.intent, { silent: pet.voiceEnabled });
     } else if (msg.type === 'done') {
       // 模型有时只触发动作、不带文字回复；这种情况下 text_delta 从没来过，
       // assistantBubble 还是 null，得补一条提示，否则聊天记录里像是完全没反应。
       if (!assistantBubble) assistantBubble = appendMessage('assistant', '（只是动了一下，没说话）');
-      if (assistantBubble && pet) pet.say(assistantBubble.textContent, 4000);
+      if (assistantBubble && pet) {
+        // 有真实回复文字才朗读（speak 自带气泡）；占位提示只冒泡
+        if (hadText) pet.speak(assistantBubble.textContent);
+        else pet.say(assistantBubble.textContent, 4000);
+      }
+      hadText = false;
       assistantBubble = null;
     } else if (msg.type === 'error') {
       appendMessage('assistant', '（消息没有送到：' + msg.message + '）');
@@ -133,9 +160,9 @@ async function start() {
     goToLogin();
     return;
   }
-  await loadPetName();
+  const manifest = await loadPetName();
   await loadHistory(token);
-  await mountPet();
+  await mountPet(manifest);
   connectWs(token);
 }
 
