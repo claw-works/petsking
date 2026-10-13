@@ -11,6 +11,10 @@
 //   pet.feed(agentEvent)            喂 Agent 事件（statemachine 驱动）
 //   pet.react(intent)               意图/情绪表演（需 AI bridge）
 //   pet.say(text)                   冒泡说话
+//   pet.setExpression(name) / pet.setGesture(name|null)   表情 / 头部小动作（渲染器支持时）
+//   pet.voice(lineId) / pet.speak(text) / pet.stopSpeak()  预录台词 / 任意文字（TTS），带口型
+//   pet.perform(perf)               执行一个表演对象 { action, expression, gesture, voice, say }
+//   pet.on('speech', cb)            { phase:'start'|'end', text, lineId? }
 //   pet.on(event, cb)               'action' | 'state' | 'click' | 'drag'
 //   pet.setFacing(dir) / pet.setPosition(x,y)
 
@@ -18,6 +22,8 @@ import { createRenderer } from './renderers/renderer-base.js';
 import { createDriver } from './core/driver-base.js';
 import { mergeConfig, loadAssetPack } from './config.js';
 import { AgentBridge } from './ai/agent-bridge.js';
+import { Voice } from './voice/voice.js';
+import { loadVoicePack } from './voice/voice-pack.js';
 
 let styleInjected = false;
 function injectStyle() {
@@ -46,7 +52,9 @@ export class DeskPet {
   constructor(config, pack) {
     this.config = config;
     this.pack = pack;
-    this.listeners = { action: [], state: [], click: [], drag: [] };
+    this.listeners = { action: [], state: [], click: [], drag: [], speech: [] };
+    this._expression = 'neutral';
+    this._destroyed = false;
     this.facing = 'front';
     this._built = false;
     this._emoteToken = 0;
@@ -60,6 +68,8 @@ export class DeskPet {
     const rendererType = this.config.renderer || this.pack.renderer;
     this.renderer = createRenderer(rendererType, { container: this.stage, assets: this.pack.assets });
     await this.renderer.mount();
+    if (this._destroyed) return this; // 挂载期间已销毁：不再创建驱动 / 语音
+    this._initVoice();
     // 驱动
     this._makeDriver(this.config.driver, this.config.driverConfig);
     // AI bridge
@@ -69,6 +79,20 @@ export class DeskPet {
     this._built = true;
     if (this.config.autoStart) this.start();
     return this;
+  }
+
+  _initVoice() {
+    const vc = this.config.voice || {};
+    this.voiceEnabled = vc.enabled !== false;
+    this._voiceCooldownMs = vc.cooldownMs ?? 8000;
+    this._lastAutoVoiceAt = 0;
+    this.voiceEngine = new Voice({ setMouth: (f) => this.renderer && this.renderer.setMouth(f), tts: vc.tts, lang: vc.lang });
+    this._voicePackP = this.pack.voices
+      ? loadVoicePack(this.pack.voices).catch((e) => { console.warn('[pet] voice pack', e); return null; })
+      : Promise.resolve(null);
+    // 浏览器自动播放策略：第一次用户手势时唤醒 AudioContext
+    this._unlockAudio = () => this.voiceEngine.unlock();
+    document.addEventListener('pointerdown', this._unlockAudio, { once: true, capture: true });
   }
 
   _buildDom() {
@@ -113,12 +137,36 @@ export class DeskPet {
     if (type === 'chain') dc = { ...(this.pack.chain || {}), ...dc };
     if (type === 'statemachine') dc = { stateActions: this.pack.stateActions || {}, chain: this.pack.chain || null, ...dc };
     this.driver = createDriver(type, dc);
-    this.driver.onAction((action, meta) => {
-      this.renderer.play(action, meta);
-      this._applyMove(action);
-      this._emit('action', { action, meta });
-      if (meta && meta.kind) this._emit('state', { state: meta.kind, action });
-    });
+    this.driver.onAction((action, meta) => this._onDriverAction(action, meta));
+  }
+
+  /** 驱动输出：播动作 + 走动 + 状态表情/手势 + 状态语音 */
+  _onDriverAction(action, meta = {}) {
+    this.renderer.play(action, meta);
+    this._applyMove(action);
+    this._applyLook(meta);
+    if (meta.voice) this.voice(meta.voice, { auto: true, expression: meta.expression });
+    this._emit('action', { action, meta });
+    if (meta.kind) this._emit('state', { state: meta.kind, action });
+  }
+
+  /** 状态带表情/手势就切过去；从带表情的状态离开时恢复 neutral，不残留 */
+  _applyLook(meta) {
+    if (meta.expression || meta.gesture) {
+      clearTimeout(this._lookT);
+      if (meta.expression) this.setExpression(meta.expression);
+      this.setGesture(meta.gesture || null);
+      this._stateLook = true;
+    } else if (this._stateLook) {
+      this._stateLook = false;
+      this.setExpression('neutral');
+      this.setGesture(null);
+    }
+  }
+
+  /** 换渲染器后把当前表情同步过去（口型由 Voice 闭包读 this.renderer，自动跟随新渲染器） */
+  _syncRendererLook() {
+    if (this.renderer) this.renderer.setExpression(this._expression);
   }
 
   /** 根据当前动作决定是否让宠物水平位移（走动时同步平移整个容器）。 */
@@ -129,12 +177,14 @@ export class DeskPet {
     if (action === walk.left) dir = -1;
     else if (action === walk.right) dir = 1;
     if (dir === null) { this._stopMove(); return; }
-    this._startMove(dir, walk);
+    this._startMove(dir, walk, action);
   }
 
-  _startMove(dir, walk) {
+  _startMove(dir, walk, action) {
     this._stopMove();
-    const speed = walk.speed || 60;      // px/秒
+    // 3D 渲染器能按 clip 真实步速换算像素速度（脚不打滑）；否则用素材包配置
+    const fromRenderer = this.renderer && this.renderer.getWalkSpeedPx ? this.renderer.getWalkSpeedPx(action) : null;
+    const speed = fromRenderer || walk.speed || 60;      // px/秒
     const margin = walk.margin ?? 20;    // 距视口边缘安全距
     // 把当前基于 corner 的定位换算成绝对 left/top，之后用 left 平移
     const r = this.root.getBoundingClientRect();
@@ -167,7 +217,12 @@ export class DeskPet {
   destroy() {
     this._emoteToken++;
     clearTimeout(this._emoteT);
+    this._destroyed = true;
     this._stopMove();
+    clearTimeout(this._lookT);
+    clearTimeout(this._exprRestoreT);
+    if (this.voiceEngine) this.voiceEngine.stop();
+    if (this._unlockAudio) document.removeEventListener('pointerdown', this._unlockAudio, { capture: true });
     if (this.driver) this.driver.stop();
     if (this.renderer) this.renderer.destroy();
     if (this.bridge) this.bridge.unbindAll();
@@ -177,7 +232,7 @@ export class DeskPet {
   // —— 驱动函数（对外）——
   play(action, meta) { if (this.renderer) this.renderer.play(action, meta || { loop: false }); this._emit('action', { action, meta }); return this; }
   feed(ev) { if (this.driver && this.driver.feed) this.driver.feed(ev); return this; }
-  react(intent) { if (this.bridge) return this.bridge.reactTo(intent); this.play(intent, { loop: false }); }
+  react(intent, opts) { if (this.bridge) return this.bridge.reactTo(intent, opts); this.play(intent, { loop: false }); }
   clickAction() { if (this.driver && this.driver.click) this.driver.click(); }
 
   setDriver(type, config) { this._makeDriver(type, config); this.start(); return this; }
@@ -186,9 +241,74 @@ export class DeskPet {
     if (this.renderer) this.renderer.destroy();
     this.renderer = createRenderer(type, { container: this.stage, assets: this.pack.assets });
     await this.renderer.mount();
-    this.driver.onAction((action, meta) => { this.renderer.play(action, meta); this._emit('action', { action, meta }); });
+    this.driver.onAction((action, meta) => this._onDriverAction(action, meta));
+    this._syncRendererLook();
     if (this.driver.current) this.renderer.play(this.driver.current, { loop: true });
     return this;
+  }
+
+  /**
+   * 执行表演对象（意图反应用）：一次性动作 + 表情/手势保持 holdMs（默认 3s）后恢复 + 语音或气泡。
+   * opts.silent：跳过语音（例如聊天随后会朗读整段回复）。
+   */
+  perform(perf, { kind, silent = false } = {}) {
+    if (!perf) return this;
+    if (perf.action) this.play(perf.action, { loop: false, kind });
+    if (perf.expression || perf.gesture) {
+      if (perf.expression) this.setExpression(perf.expression);
+      if (perf.gesture) this.setGesture(perf.gesture);
+      clearTimeout(this._lookT);
+      this._lookT = setTimeout(() => { this.setExpression('neutral'); this.setGesture(null); }, perf.holdMs ?? 3000);
+    }
+    if (perf.voice && !silent) this.voice(perf.voice, { auto: true, expression: perf.expression });
+    else if (perf.say) this.say(perf.say);
+    return this;
+  }
+
+  setExpression(name) { this._expression = name || 'neutral'; if (this.renderer) this.renderer.setExpression(this._expression); return this; }
+  setGesture(name) { if (this.renderer) this.renderer.setGesture(name || null); return this; }
+
+  /** 预录语音包（Promise<VoicePack|null>） */
+  voicePack() { return this._voicePackP || Promise.resolve(null); }
+
+  /**
+   * 播预录台词：音频（口型）+ 气泡 + 台词表情（说完 0.7s 恢复）。
+   * opts.auto：状态机 / 意图自动触发，受 cooldownMs 限制；手动调用不受限。
+   */
+  async voice(lineId, { expression, auto = false } = {}) {
+    const pack = await this.voicePack();
+    const line = pack && pack.get(lineId);
+    if (!line) { console.warn('[pet] unknown voice line:', lineId); return { played: false, reason: 'unknown-line' }; }
+    const src = pack.url(line);
+    if (!src) { console.warn('[pet] voice line has no audio url:', lineId); return { played: false, reason: 'no-src' }; }
+    if (auto && this.voiceEngine.unlocked) {
+      const now = Date.now();
+      if (now - this._lastAutoVoiceAt < this._voiceCooldownMs) return { played: false, reason: 'cooldown' };
+      this._lastAutoVoiceAt = now;
+    }
+    return this._talk(line.text, () => this.voiceEngine.playAudio(src), { expression: expression || line.expression, lineId });
+  }
+
+  /** 任意文字说话：TTS provider 出声（有音频则音频口型，否则按字估算）+ 气泡 */
+  speak(text, { expression } = {}) {
+    return this._talk(text, () => this.voiceEngine.speakText(text), { expression });
+  }
+
+  stopSpeak() { if (this.voiceEngine) this.voiceEngine.stop(); return this; }
+
+  async _talk(text, run, { expression, lineId } = {}) {
+    if (text) this.say(text, Math.max(2600, text.length * 220));
+    if (!this.voiceEnabled) return { played: false, reason: 'disabled' };
+    const prev = this._expression;
+    if (expression) this.setExpression(expression);
+    this._emit('speech', { phase: 'start', text, lineId });
+    const res = await run();
+    this._emit('speech', { phase: 'end', text, lineId, ...res });
+    if (expression) {
+      clearTimeout(this._exprRestoreT);
+      this._exprRestoreT = setTimeout(() => { if (this._expression === expression) this.setExpression(prev); }, 700);
+    }
+    return res;
   }
 
   setFacing(dir) { this.facing = dir; if (this.renderer) this.renderer.setFacing(dir); return this; }
