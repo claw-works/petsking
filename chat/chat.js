@@ -9,9 +9,12 @@ const petTitle = document.getElementById('pet-title');
 const chatLog = document.getElementById('chat-log');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
-const MUTE_KEY = 'petsking_muted';
+// 朗读开关按宠物分别记忆；没记过时按渲染器能力决定默认值：有口型（如 gltf）默认朗读，否则默认静音
+const MUTE_KEY = 'petsking_muted:' + PET_ID;
 const muteBtn = document.getElementById('mute-btn');
-let muted = localStorage.getItem(MUTE_KEY) === '1';
+const savedMute = localStorage.getItem(MUTE_KEY);
+let muted = savedMute == null ? true : savedMute === '1';   // 未记过：挂载前先当静音，挂载后按能力修正
+let userToggledMute = false;   // 挂载前就手动切过：以用户选择为准，不再按能力覆盖
 let hadText = false;   // 本轮是否收到过真实回复文字
 
 let pet = null;
@@ -80,6 +83,10 @@ async function mountPet(manifest) {
     ai: { enabled: true },
     autoStart: true,
   });
+  if (savedMute == null && !userToggledMute) {
+    const caps = (pet.renderer && pet.renderer.capabilities) || {};
+    muted = !caps.mouth;
+  }
   applyMute();
 }
 
@@ -91,6 +98,7 @@ function applyMute() {
 }
 
 muteBtn.addEventListener('click', () => {
+  userToggledMute = true;
   muted = !muted;
   localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
   applyMute();
@@ -127,6 +135,7 @@ function connectWs(token) {
       assistantBubble = null;
     } else if (msg.type === 'error') {
       appendMessage('assistant', '（消息没有送到：' + msg.message + '）');
+      hadText = false;
       assistantBubble = null;
     }
   });

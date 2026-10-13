@@ -29,7 +29,10 @@ async function fetchManifest() {
   return res.json();
 }
 
+let rebuildToken = 0;   // 每次 rebuild +1：异步回来的旧结果（如上一只宠物的 voicePack）据此丢弃
+
 async function rebuild() {
+  const token = ++rebuildToken;
   if (pet) { pet.destroy(); pet = null; }
   mount.innerHTML = '';
   const driver = document.getElementById('sel-driver').value;
@@ -48,10 +51,13 @@ async function rebuild() {
     log('已加载 ' + petId + ' / ' + renderer + ' / ' + driver);
     // 只记录没能出声的情况（被锁、冷却、无 TTS、已关闭等）
     pet.on('speech', ({ phase, text, reason, played }) => { if (phase === 'end' && played === false && reason) log('🔇 未出声: ' + reason + ' · ' + text); });
-    renderFaceControls();
+    renderFaceControls(token);
   } catch (e) {
     log('❌ 创建失败: ' + e.message);
-    mount.innerHTML = '<div style="color:#ff9db0;padding:20px;font-size:13px">创建失败：' + e.message + '</div>';
+    const err = document.createElement('div');
+    err.style.cssText = 'color:#ff9db0;padding:20px;font-size:13px';
+    err.textContent = '创建失败：' + e.message;
+    mount.replaceChildren(err);
   }
 }
 
@@ -223,7 +229,7 @@ function fillRow(sectionId, rowId, items, onClick) {
   });
 }
 
-async function renderFaceControls() {
+async function renderFaceControls(token) {
   if (!pet) return;
   const r = pet.renderer;
   const caps = (r && r.capabilities) || {};
@@ -233,7 +239,9 @@ async function renderFaceControls() {
   fillRow('gesture-section', 'gesture-row',
     caps.gesture ? [...r.listGestures().map((g) => ({ id: g, label: g })), { id: null, label: '清除' }] : [],
     (id) => { manualHold(); pet.setGesture(id); log('手势: ' + (id || '清除')); });
-  const pack = await pet.voicePack();
+  const p = pet;
+  const pack = await p.voicePack();
+  if (token !== rebuildToken || p !== pet) return;   // 等语音包期间已经换了宠物 / 重建：不要把旧台词填进来
   fillRow('voice-section', 'voice-row',
     pack ? pack.lines.map((l) => ({ id: l.id, label: l.label || l.id, title: l.text })) : [],
     async (id) => { const res = await pet.voice(id); log('语音: ' + id + (res.played ? '' : ' ✗ ' + res.reason)); });

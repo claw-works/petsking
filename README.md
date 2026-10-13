@@ -70,14 +70,14 @@ pet.say('搞定啦～');                                          // 冒泡说�
 
 ## 💬 角色培养聊天
 
-`pets/index.json` 里标了 `chat: true` 的宠物（`blue-whale`、`残红(canhong)`、`早雾(zaowu)`、`清霄(qingxiao)`）支持在 `/chat/?pet=<id>` 打字聊天（也可以从 `/dashboard/` 对应卡片的"互动"链接进入），回复由 Amazon Bedrock（Claude）驱动，可通过 tool-use 触发桌宠动画；清霄（gltf）会用语音朗读回复；每个用户的对话历史按 `(用户, 宠物)` 落地 SQLite 持久化，互不可见。
+`pets/index.json` 里标了 `chat: true` 的宠物（`blue-whale`、`残红(canhong)`、`早雾(zaowu)`、`清霄(qingxiao)`）支持在 `/chat/?pet=<id>` 打字聊天（也可以从 `/dashboard/` 对应卡片的"互动"链接进入），回复由 Amazon Bedrock（Claude）驱动，可通过 tool-use 触发桌宠动画；渲染器带口型能力的宠物（目前是清霄 gltf）默认用语音朗读回复，其余宠物默认静音（聊天页的朗读按钮可切换，按宠物分别记在 localStorage `petsking_muted:<petId>`）；每个用户的对话历史按 `(用户, 宠物)` 落地 SQLite 持久化，互不可见。
 
 前置条件：
 
 - 已安装 [Bun](https://bun.sh)
 - 一个具备 Bedrock 访问权限的 AWS 账号，且已在该账号里启用所选模型（默认用跨区域推理配置 ID `us.anthropic.claude-sonnet-4-5-...`）
 
-只有 `blue-whale` 配了专属人设（`pets/blue-whale/soul.md`）；残红和早雾还没配，聊天时会走一段通用助手兜底文案。
+`blue-whale`、`残红(canhong)`、`清霄(qingxiao)` 配了专属人设（`pets/<id>/soul.md`）；早雾还没配，聊天时会走一段通用助手兜底文案。
 
 > 登录态 30 天后过期，过期需清浏览器数据重新登录，暂未做应用内自动续期 —— 这是当前 MVP 的已知取舍，不是待修 bug。
 
