@@ -4,6 +4,7 @@
 //   speakText(text)  调 TTS provider（契约见 tts.js）：
 //                      返回音频 → 走音频播放；返回 { done, cancel? } → 循环按字估算口型直到 done，stop() 时调 cancel；返回 null → no-tts
 //   stop()
+//   close()          stop() + 释放 AudioContext
 // 返回值统一 { played: bool, reason?: 'locked'|'error'|'tts-error'|'no-tts'|'no-src'|'empty', interrupted?: bool }
 //
 // 打断模型：_begin() 先 stop() 再领一个 token；任何 await 之后 token 变了就说明被打断（新一段或 stop()）。
@@ -106,6 +107,12 @@ export class Voice {
     const onStop = this._onStop;
     this._onStop = null;
     if (onStop) onStop();
+  }
+
+  /** 停止并释放底层音频资源（AudioContext）。宠物销毁时调用 */
+  close() {
+    this.stop();
+    if (this.lipsync && typeof this.lipsync.close === 'function') this.lipsync.close();
   }
 
   _begin() { this.stop(); return this._token; }

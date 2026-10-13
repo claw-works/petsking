@@ -14,6 +14,9 @@
 //   autoStart: true,
 // }
 
+// 绝对地址：以 / 或任意协议（http: blob: data: file: app: …）开头（与 voice/voice-pack.js 一致）
+const ABS_RE = /^([a-z][a-z0-9+.-]*:|\/)/i;
+
 export const DEFAULT_CONFIG = {
   renderer: null,          // null=用素材包 pet.json 里的 renderer
   driver: 'chain',
@@ -84,9 +87,11 @@ export async function loadAssetPack(pet, petsBaseUrl = 'pets/') {
   if (assets.actions == null) assets.actions = manifest.actions || {};
 
   // 预录语音包 index.json：相对 assetsDir（与其它素材一致）
-  const voices = manifest.voices
-    ? (/^https?:|^\//.test(manifest.voices) ? manifest.voices : assets.baseUrl + manifest.voices)
-    : null;
+  let voices = null;
+  if (manifest.voices != null && manifest.voices !== '') {
+    if (typeof manifest.voices !== 'string') console.warn('[pet] manifest.voices 应为字符串 URL，已忽略:', manifest.voices);
+    else voices = ABS_RE.test(manifest.voices) ? manifest.voices : assets.baseUrl + manifest.voices;
+  }
 
   return {
     id: manifest.id || 'pet',

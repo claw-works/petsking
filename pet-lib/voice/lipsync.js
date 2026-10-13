@@ -124,6 +124,16 @@ export class AudioLipSync {
     if (finish) finish();
   }
 
+  /** 彻底释放：停播 + 关闭 AudioContext（之后再 play 会重新建一个）。宠物销毁时调用 */
+  close() {
+    this.stop();
+    const ctx = this.ctx;
+    this.ctx = null;
+    this.analyser = null;
+    this.cache.clear();   // 已解码的 AudioBuffer 属于旧 ctx 的生命周期，一并丢掉
+    if (ctx && typeof ctx.close === 'function') Promise.resolve(ctx.close()).catch(() => {});
+  }
+
   get playing() { return !!this.current; }
 
   /** 当前口型特征 { open, wide, round }（0..1）；没在播返回 null */

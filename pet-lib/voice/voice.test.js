@@ -235,3 +235,15 @@ test('playAudio(null/undefined) → no-src，且不打断正在说的', async ()
   ls.plays[0].resolve();
   expect(await p).toEqual({ played: true, interrupted: false });
 });
+
+test('close：stop() 并释放 lipsync', async () => {
+  const ls = fakeLipsync();
+  let closed = 0;
+  ls.close = () => { closed++; };
+  const v = new Voice({ lipsync: ls });
+  const p = v.playAudio('/a.mp3');
+  v.close();
+  expect((await p).interrupted).toBe(true);
+  expect(closed).toBe(1);
+  expect(ls.stops).toBeGreaterThan(0);
+});

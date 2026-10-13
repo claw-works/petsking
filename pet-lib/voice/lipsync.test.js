@@ -159,3 +159,21 @@ test('load：普通 URL 缓存，blob:/data: 不缓存', async () => {
   expect(fetches).toBe(4);
   expect([...ls.cache.keys()]).toEqual(['/a.mp3']);
 });
+
+test('close：停掉正在播的、关闭 AudioContext 并置空', async () => {
+  const ls = new AudioLipSync();
+  ls.unlock();
+  const ctx = ls.ctx;
+  let closed = 0;
+  ctx.close = () => { closed++; return Promise.resolve(); };
+  const p = ls.play(new ArrayBuffer(4));
+  await tick(5);
+  expect(ls.playing).toBe(true);
+  ls.close();
+  await p;   // 正在播的那段立即结束
+  expect(ls.playing).toBe(false);
+  expect(closed).toBe(1);
+  expect(ls.ctx).toBe(null);
+  ls.close();   // 重复调用无副作用
+  expect(closed).toBe(1);
+});

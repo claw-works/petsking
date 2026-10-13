@@ -101,6 +101,8 @@ export class AgentBridge {
     const emotes = this.pet.pack && this.pet.pack.emotes;
     if (perf.action && emotes && emotes.actions && emotes.actions[perf.action] && this.pet.emote) {
       this.pet.emote(perf.action);
+      // 特写只替代动作；表情 / 手势 / 语音 / 气泡照常执行
+      this.pet.perform({ ...perf, action: null }, { kind: 'REACT:' + intent, silent: !!opts.silent });
     } else {
       this.pet.perform(perf, { kind: 'REACT:' + intent, silent: !!opts.silent });
     }

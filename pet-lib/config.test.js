@@ -34,3 +34,22 @@ test('mergeConfig 合并 voice 配置', () => {
   expect(c.voice).toEqual({ enabled: true, cooldownMs: 1000, lang: 'zh-CN' });
   expect(mergeConfig({}).voice.enabled).toBe(true);
 });
+
+test('voices：任意协议 / 开头原样使用，相对路径接 assets.baseUrl', async () => {
+  for (const abs of ['https://x/v.json', 'blob:abc', 'data:application/json,{}', 'app://pets/v.json', '/v/index.json']) {
+    const pack = await loadAssetPack({ id: 'x', baseUrl: '/p/', voices: abs });
+    expect(pack.voices).toBe(abs);
+  }
+  const rel = await loadAssetPack({ id: 'x', baseUrl: '/p/', voices: 'voices/index.json' });
+  expect(rel.voices).toBe('/p/assets/voices/index.json');
+});
+
+test('voices 不是字符串 → 警告并置 null', async () => {
+  const warn = console.warn; let warned = 0;
+  console.warn = () => { warned++; };
+  try {
+    const pack = await loadAssetPack({ id: 'x', voices: { url: 'a.json' } });
+    expect(pack.voices).toBe(null);
+    expect(warned).toBe(1);
+  } finally { console.warn = warn; }
+});

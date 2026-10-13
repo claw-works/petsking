@@ -11,12 +11,20 @@
 //   pet.feed(agentEvent)            喂 Agent 事件（statemachine 驱动）
 //   pet.react(intent)               意图/情绪表演（需 AI bridge）
 //   pet.say(text)                   冒泡说话
-//   pet.setExpression(name) / pet.setGesture(name|null)   表情 / 头部小动作（渲染器支持时）
+//   pet.setExpression(name) / pet.setGesture(name|null)   手动表情 / 头部小动作（渲染器支持时；见下方「外观分层」）
 //   pet.voice(lineId) / pet.speak(text) / pet.stopSpeak()  预录台词 / 任意文字（TTS），带口型
 //   pet.perform(perf)               执行一个表演对象 { action, expression, gesture, voice, say }
 //   pet.on('speech', cb)            { phase:'start'|'end', text, lineId? }
 //   pet.on(event, cb)               'action' | 'state' | 'click' | 'drag'
 //   pet.setFacing(dir) / pet.setPosition(x,y)
+//
+// 外观分层（core/look.js）：表情 / 手势不再由各处定时器各自保存/恢复，而是每个来源只写自己那层，
+// 由 _refreshLook() 统一解析后下发给渲染器（只在结果变化时下发，避免 setGesture 重启淡入淡出）：
+//   _talkLook   说话台词表情：_talk 开始时设置，最新一段说完 0.7s 后清除（talk token 防止旧段误清）
+//   _manualLook 手动 setExpression / setGesture：一直保持，传 null / 'neutral' 清除
+//   _reactLook  意图表演 perform：holdMs（默认 3s）后清除
+//   _stateLook  驱动状态 meta：每个驱动动作替换（带表情/手势就设置，不带就清空）
+// 表情：说话 > 手动 > 意图 > 状态 > neutral；手势：手动 > 意图 > 状态 > 无（说话不碰手势）。
 
 import { createRenderer } from './renderers/renderer-base.js';
 import { createDriver } from './core/driver-base.js';
@@ -24,6 +32,7 @@ import { mergeConfig, loadAssetPack } from './config.js';
 import { AgentBridge } from './ai/agent-bridge.js';
 import { Voice } from './voice/voice.js';
 import { loadVoicePack } from './voice/voice-pack.js';
+import { resolveLook } from './core/look.js';
 
 let styleInjected = false;
 function injectStyle() {
@@ -53,7 +62,14 @@ export class DeskPet {
     this.config = config;
     this.pack = pack;
     this.listeners = { action: [], state: [], click: [], drag: [], speech: [] };
-    this._expression = 'neutral';
+    // 外观分层（见文件头）
+    this._talkLook = null;
+    this._manualLook = null;
+    this._reactLook = null;
+    this._stateLook = null;
+    this._appliedExpr = undefined;    // 最近一次下发给渲染器的值（undefined = 尚未下发）
+    this._appliedGesture = undefined;
+    this._talkToken = 0;
     this._destroyed = false;
     this.facing = 'front';
     this._built = false;
@@ -145,28 +161,35 @@ export class DeskPet {
     this.renderer.play(action, meta);
     this._applyMove(action);
     this._applyLook(meta);
-    if (meta.voice) this.voice(meta.voice, { auto: true, expression: meta.expression });
+    // 点击触发的台词是用户主动交互：不受、也不占用自动语音冷却
+    if (meta.voice) this.voice(meta.voice, { auto: meta.kind !== 'CLICK', expression: meta.expression });
     this._emit('action', { action, meta });
     if (meta.kind) this._emit('state', { state: meta.kind, action });
   }
 
-  /** 状态带表情/手势就切过去；从带表情的状态离开时恢复 neutral，不残留 */
+  /** 状态层：驱动动作带表情/手势就设置，不带就清空（离开带表情的状态不残留）；不影响意图/说话层 */
   _applyLook(meta) {
-    if (meta.expression || meta.gesture) {
-      clearTimeout(this._lookT);
-      if (meta.expression) this.setExpression(meta.expression);
-      this.setGesture(meta.gesture || null);
-      this._stateLook = true;
-    } else if (this._stateLook) {
-      this._stateLook = false;
-      this.setExpression('neutral');
-      this.setGesture(null);
-    }
+    this._stateLook = (meta.expression || meta.gesture)
+      ? { expression: meta.expression || null, gesture: meta.gesture || null }
+      : null;
+    this._refreshLook();
   }
 
-  /** 换渲染器后把当前表情同步过去（口型由 Voice 闭包读 this.renderer，自动跟随新渲染器） */
+  /** 按层解析当前表情/手势，只在与上次下发值不同时调渲染器 */
+  _refreshLook() {
+    if (this._destroyed || !this.renderer) return;
+    const { expression, gesture } = resolveLook({
+      talk: this._talkLook, manual: this._manualLook, react: this._reactLook, state: this._stateLook,
+    });
+    if (expression !== this._appliedExpr) { this._appliedExpr = expression; this.renderer.setExpression(expression); }
+    if (gesture !== this._appliedGesture) { this._appliedGesture = gesture; this.renderer.setGesture(gesture); }
+  }
+
+  /** 换渲染器后强制重新下发当前外观（口型由 Voice 闭包读 this.renderer，自动跟随新渲染器） */
   _syncRendererLook() {
-    if (this.renderer) this.renderer.setExpression(this._expression);
+    this._appliedExpr = undefined;
+    this._appliedGesture = undefined;
+    this._refreshLook();
   }
 
   /** 根据当前动作决定是否让宠物水平位移（走动时同步平移整个容器）。 */
@@ -219,9 +242,11 @@ export class DeskPet {
     clearTimeout(this._emoteT);
     this._destroyed = true;
     this._stopMove();
-    clearTimeout(this._lookT);
-    clearTimeout(this._exprRestoreT);
-    if (this.voiceEngine) this.voiceEngine.stop();
+    this._talkToken++;
+    clearTimeout(this._reactT);
+    clearTimeout(this._talkLookT);
+    clearTimeout(this._bubbleT);
+    if (this.voiceEngine) this.voiceEngine.close();   // 停止出声并释放 AudioContext
     if (this._unlockAudio) document.removeEventListener('pointerdown', this._unlockAudio, { capture: true });
     if (this.driver) this.driver.stop();
     if (this.renderer) this.renderer.destroy();
@@ -235,38 +260,69 @@ export class DeskPet {
   react(intent, opts) { if (this.bridge) return this.bridge.reactTo(intent, opts); this.play(intent, { loop: false }); }
   clickAction() { if (this.driver && this.driver.click) this.driver.click(); }
 
-  setDriver(type, config) { this._makeDriver(type, config); this.start(); return this; }
+  setDriver(type, config) {
+    if (this._destroyed) return this;
+    this._makeDriver(type, config); this.start(); return this;
+  }
 
   async setRenderer(type) {
+    if (this._destroyed) return this;
     if (this.renderer) this.renderer.destroy();
-    this.renderer = createRenderer(type, { container: this.stage, assets: this.pack.assets });
-    await this.renderer.mount();
-    this.driver.onAction((action, meta) => this._onDriverAction(action, meta));
+    const r = createRenderer(type, { container: this.stage, assets: this.pack.assets });
+    this.renderer = r;
+    await r.mount();
+    // 挂载期间宠物被销毁 / 又被更新的 setRenderer 取代：挂载完成后再销毁一次（有的渲染器 mount 末尾才挂 DOM）
+    if (this._destroyed || this.renderer !== r) { r.destroy(); return this; }
     this._syncRendererLook();
-    if (this.driver.current) this.renderer.play(this.driver.current, { loop: true });
+    // init 在挂载期间被打断时可能还没有驱动：跳过驱动接线
+    if (this.driver) {
+      this.driver.onAction((action, meta) => this._onDriverAction(action, meta));
+      if (this.driver.current) this.renderer.play(this.driver.current, { loop: true });
+    }
     return this;
   }
 
   /**
-   * 执行表演对象（意图反应用）：一次性动作 + 表情/手势保持 holdMs（默认 3s）后恢复 + 语音或气泡。
+   * 执行表演对象（意图反应用）：一次性动作 + 意图层表情/手势保持 holdMs（默认 3s）+ 语音或气泡。
+   * 意图层到期只清自己，回落到状态层（不会冲掉状态表情）。
+   * 语音没播成（冷却 / 台词不存在 / 无音频）时，有 say 就退回气泡。
    * opts.silent：跳过语音（例如聊天随后会朗读整段回复）。
    */
   perform(perf, { kind, silent = false } = {}) {
-    if (!perf) return this;
+    if (!perf || this._destroyed) return this;
     if (perf.action) this.play(perf.action, { loop: false, kind });
     if (perf.expression || perf.gesture) {
-      if (perf.expression) this.setExpression(perf.expression);
-      if (perf.gesture) this.setGesture(perf.gesture);
-      clearTimeout(this._lookT);
-      this._lookT = setTimeout(() => { this.setExpression('neutral'); this.setGesture(null); }, perf.holdMs ?? 3000);
+      this._reactLook = { expression: perf.expression || null, gesture: perf.gesture || null };
+      clearTimeout(this._reactT);
+      this._reactT = setTimeout(() => { this._reactLook = null; this._refreshLook(); }, perf.holdMs ?? 3000);
+      this._refreshLook();
     }
-    if (perf.voice && !silent) this.voice(perf.voice, { auto: true, expression: perf.expression });
-    else if (perf.say) this.say(perf.say);
+    if (perf.voice && !silent) {
+      this.voice(perf.voice, { auto: true, expression: perf.expression }).then((res) => {
+        if (this._destroyed || !perf.say || !res || res.played) return;
+        if (['cooldown', 'unknown-line', 'no-src'].includes(res.reason)) this.say(perf.say);
+      });
+    } else if (perf.say) this.say(perf.say);
     return this;
   }
 
-  setExpression(name) { this._expression = name || 'neutral'; if (this.renderer) this.renderer.setExpression(this._expression); return this; }
-  setGesture(name) { if (this.renderer) this.renderer.setGesture(name || null); return this; }
+  /**
+   * 手动表情（手动层，优先级仅次于说话）：一直保持到下次手动调用；传 null / 'neutral' 清除手动层，
+   * 回落到意图 / 状态层。
+   */
+  setExpression(name) {
+    const expression = name && name !== 'neutral' ? name : null;
+    this._manualLook = { ...(this._manualLook || {}), expression };
+    this._refreshLook();
+    return this;
+  }
+
+  /** 手动手势（手动层）：一直保持；传 null 清除，回落到意图 / 状态层 */
+  setGesture(name) {
+    this._manualLook = { ...(this._manualLook || {}), gesture: name || null };
+    this._refreshLook();
+    return this;
+  }
 
   /** 预录语音包（Promise<VoicePack|null>） */
   voicePack() { return this._voicePackP || Promise.resolve(null); }
@@ -277,11 +333,14 @@ export class DeskPet {
    */
   async voice(lineId, { expression, auto = false } = {}) {
     const pack = await this.voicePack();
+    if (this._destroyed) return { played: false, reason: 'destroyed' };
     const line = pack && pack.get(lineId);
     if (!line) { console.warn('[pet] unknown voice line:', lineId); return { played: false, reason: 'unknown-line' }; }
     const src = pack.url(line);
     if (!src) { console.warn('[pet] voice line has no audio url:', lineId); return { played: false, reason: 'no-src' }; }
-    if (auto && this.voiceEngine.unlocked) {
+    // 自动语音冷却：未解锁时同样适用 —— 此时虽不出声，但 _talk 仍会冒台词气泡，不限流会刷屏。
+    // 走到这里就一定会出声或冒气泡，所以此刻记录冷却起点。
+    if (auto) {
       const now = Date.now();
       if (now - this._lastAutoVoiceAt < this._voiceCooldownMs) return { played: false, reason: 'cooldown' };
       this._lastAutoVoiceAt = now;
@@ -296,17 +355,28 @@ export class DeskPet {
 
   stopSpeak() { if (this.voiceEngine) this.voiceEngine.stop(); return this; }
 
+  /**
+   * 说话：气泡 + 说话层表情。新一段取代旧一段（Voice 本身也会打断旧音频），
+   * 只有最新一段结束 0.7s 后才清说话层 —— 旧段结束不会清掉/还原新段的表情。
+   */
   async _talk(text, run, { expression, lineId } = {}) {
+    if (this._destroyed) return { played: false, reason: 'destroyed' };
     if (text) this.say(text, Math.max(2600, text.length * 220));
     if (!this.voiceEnabled) return { played: false, reason: 'disabled' };
-    const prev = this._expression;
-    if (expression) this.setExpression(expression);
+    const tok = ++this._talkToken;
+    clearTimeout(this._talkLookT);
+    this._talkLook = expression ? { expression } : null;
+    this._refreshLook();
     this._emit('speech', { phase: 'start', text, lineId });
     const res = await run();
+    if (this._destroyed) return { played: false, reason: 'destroyed' };
     this._emit('speech', { phase: 'end', text, lineId, ...res });
-    if (expression) {
-      clearTimeout(this._exprRestoreT);
-      this._exprRestoreT = setTimeout(() => { if (this._expression === expression) this.setExpression(prev); }, 700);
+    if (tok === this._talkToken && this._talkLook) {
+      this._talkLookT = setTimeout(() => {
+        if (tok !== this._talkToken) return;
+        this._talkLook = null;
+        this._refreshLook();
+      }, 700);
     }
     return res;
   }
