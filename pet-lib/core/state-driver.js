@@ -4,12 +4,13 @@
 // 融合 dsh-desktop-pet（确定性 + 多任务折叠 + flash/sleep）与 whale（Agent 语义）。
 //
 // config：
-//   stateActions: { SEMANTIC: actionName }   状态→动作映射（来自素材包）
+//   stateActions: { SEMANTIC: actionName | 表演对象 }   状态→动作映射（来自素材包，见 performance.js）
 //   flashMs, sleepAfterMs                     计时
 //   idleAction                                默认 idle 动作名
 //
 // 外部通过 pet.feed(event) → driver.feed(event) 喂事件（见 ai/agent-bridge.js）。
 import { DriverBase, registerDriver, createDriver } from './driver-base.js';
+import { resolvePerformance, performanceMeta } from './performance.js';
 
 export const SEMANTIC_PRIORITY = {
   WAITING_FOR_USER: 60, ERROR: 50,
@@ -135,8 +136,9 @@ export class StateDriver extends DriverBase {
     }
     // 离开 IDLE（进入工作/睡眠等状态）→ 停掉自主陪伴，按状态播动作
     this._stopIdleChain();
-    const action = this.stateActions[state] || this.idleAction;
-    this._emit(action, { loop: true, kind: state });
+    // stateActions 的值可以是动作名或表演对象 { action, expression, gesture, voice }
+    const perf = resolvePerformance(this.stateActions[state]) || { action: this.idleAction };
+    this._emit(perf.action || this.idleAction, { loop: true, kind: state, ...performanceMeta(perf) });
   }
 
   click() { if (this.clickAction) this._emit(this.clickAction, { loop: false, kind: 'CLICK' }); }

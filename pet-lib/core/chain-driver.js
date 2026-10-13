@@ -6,6 +6,7 @@
 //   weights:{ idle, action }         顶层权重（category = 100 - idle - action）
 //   playMs(action) 或 playMs:number  一个动作播多久后接下一个
 import { DriverBase, registerDriver } from './driver-base.js';
+import { resolvePerformance, performanceMeta } from './performance.js';
 
 function pick(pool, exclude) {
   const e = exclude ? pool.filter((n) => n !== exclude) : pool;
@@ -68,10 +69,12 @@ export class ChainDriver extends DriverBase {
 
   click() {
     if (!this.clicks.length) return;
-    const a = pick(this.clicks);
-    this._emit(a, { loop: false, kind: 'CLICK' });
+    // clicks 里可以是动作名或表演对象 { action, expression, gesture, voice }
+    const perf = resolvePerformance(pick(this.clicks));
+    if (!perf || !perf.action) return;
+    this._emit(perf.action, { loop: false, kind: 'CLICK', ...performanceMeta(perf) });
     if (this.timer) clearTimeout(this.timer);
-    if (!this.paused) this.timer = setTimeout(() => this.pickNext(), this._ms(a));
+    if (!this.paused) this.timer = setTimeout(() => this.pickNext(), this._ms(perf.action));
   }
 }
 
