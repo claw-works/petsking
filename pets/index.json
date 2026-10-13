@@ -3,6 +3,8 @@
     { "id": "blue-whale", "name": "蓝鲸小助手", "renderers": ["webm"], "path": "blue-whale/pet.json", "chat": true },
     { "id": "canhong", "name": "残红", "renderers": ["webm"], "path": "canhong/pet.json", "chat": true },
     { "id": "zaowu", "name": "早雾", "renderers": ["webm"], "path": "zaowu/pet.json", "chat": true },
+    { "id": "baicang", "name": "白藏", "renderers": ["webm"], "path": "baicang/pet.json", "chat": true },
+    { "id": "cantarella", "name": "坎特蕾拉", "renderers": ["webm"], "path": "cantarella/pet.json", "chat": true },
     { "id": "whale-gif", "name": "像素鲸鱼(GIF)", "renderers": ["gif"], "path": "whale-gif/pet.json" },
     { "id": "pixel-puff", "name": "蓝噗(像素)", "renderers": ["pixel"], "path": "pixel-puff/pet.json" },
     { "id": "chibi-svg", "name": "矢量小生物(SVG)", "renderers": ["svg"], "path": "chibi-svg/pet.json" },

@@ -625,3 +625,124 @@
 click-happy / happy / angry / shy / beg / wink / error / surprised / sad / think / cheer，共 20 条全身动作，
 `stateActions` 已覆盖 STARTING/IDLE/THINKING/WORKING/CODING/RUNNING_COMMAND/WAITING_FOR_USER/SUCCESS/ERROR/SLEEPING
 （§3.6 状态机规划表全部落地）。真正的半身近景表情特写（走 emotes.actions）、turn 仍待后续按残红的规范补齐。
+
+
+
+### 白藏（baicang）
+
+**素材目录**：`pets/baicang/assets/`（角色专属）。竖幅角色，来自游戏《异环》，
+`geometry: { "aspect": 0.7692, "feetRatio": 0.985 }`（640×832）——脚线比早雾（0.92）、残红（0.965）都更贴底，
+实测这批素材角色鞋底几乎顶到画布下边缘，按实测值填，不强行套用早雾的 0.92。
+
+#### idle + cheer / dance1 / drag / click-wave(greet) / think / walk-left / walk-right / walk-towards（✅ 已跑通）
+
+- **AI 产出**：`green-idle.mp4` / `green-cheer.mp4` / `green-dance1.mp4` / `green-drag.mp4` / `green-greet.mp4` /
+  `green-think.mp4` / `green-walk-left.mp4` / `green-walk-right.mp4` / `green-walk-towards.mp4`，
+  全部 **640×832（竖版）/ H.264 / 24fps** 纯绿幕 `#00FF00`，时长 3.04~6.58s 不等（73~158 帧）。
+  另有 `green-dance1.png`（站姿参考图）、`green-work.png`（work 动作静态参考图，无对应视频，未生产 work.webm）。
+- **脚线实测**：用 Python + Pillow/Numpy 对 idle 首/中/尾帧做前景提取（`g - max(r,b) > 25` 判绿幕/阴影），
+  肉眼核对鞋底裁剪区确认角色鞋底贴近画布下边缘（约 98% 高度），比早雾更贴底，`feetRatio` 定为 **0.985**。
+  水平居中（≈49.9%），头顶留白约 10.6%。
+- **转码命令**（与残红/早雾相同的 chromakey+despill 管线，`scale/pad` 用竖幅 640×832）：
+  ```sh
+  ffmpeg -y -i green-idle.mp4 -vf "\
+  chromakey=0x00FF00:0.12:0.06,\
+  despill=type=green:mix=0.5:expand=0.3,\
+  format=yuva420p,\
+  scale=640:832:force_original_aspect_ratio=decrease,\
+  pad=640:832:(ow-iw)/2:(oh-ih)/2:color=0x00000000\
+  " -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 28 -an idle.webm
+  ```
+  其余 8 条动作用同一条命令批量转码（仅替换输入/输出文件名）。
+- **验收**：
+  - `ffprobe` 确认全部 9 条均 640×832 / VP9 / 24fps / `ALPHA_MODE=1`。
+  - 用 ffmpeg `-pix_fmt rgba` 解码抽帧还原真实 alpha 通道（**直接 `select` 抽帧默认只出主流、alpha 会丢**，
+    需要显式 `-pix_fmt rgba` 才能拿到含透明度的真实帧），叠纯品红底人工核查：edge 半透明像素中绿色调占比 0%，
+    发丝/衣领边缘羽化自然，无绿边残留。
+  - playground 加载验证：`pets/index.json` 注册后本机起 `python3 -m http.server` 静态服务，playwright 打开
+    `playground/index.html?pet=baicang`，确认素材信息栏显示"动作 9 个"、chain 驱动自动播放 walk-right 并正确
+    回落 idle、手动触发 walk-left 位移正常且脚线不飘、透明合成在棋盘格背景下干净无绿边。
+- **成品体积**：idle 627KB / cheer 1.05MB / dance1 2.37MB / drag 1.16MB / greet 747KB / think 780KB /
+  walk-left 1.59MB / walk-right 1.51MB / walk-towards 1.34MB。
+- **循环区间**：这批走路素材（walk-left/right/towards）经逐帧前景包围盒分析，其运动是"转身→行走→收步站定"
+  的单次演出而非稳定周期步态（帧间差异值无明显周期性重复），未做精确顺拐修帧；按项目决定统一采用
+  `loop: true, loopFrom: 0, loopTo: -1`（整段循环播放），后续如需要更精确的循环点，用 `tools/frame-inspector`
+  工具人工核对后再调整具体帧号。
+- **接入**：`pets/baicang/pet.json` 新建——
+  - `actions`：`idle`、`cheer`（对象式 loop 全段）、`dance1`（同）、`drag`（同）、`click-wave`（复用 greet 素材）、
+    `think`（同）、`walk-left`/`walk-right`/`walk-towards`（均对象式 loop 全段）。
+  - `chain.idle: ["idle"]`、`chain.actions: ["dance1","think","walk-left","walk-right"]`、
+    `chain.clicks: ["cheer"]`（点击回应用欢呼动作）。
+  - `stateActions`：THINKING/WORKING/CODING/RUNNING_COMMAND → think；STARTING/WAITING_FOR_USER → click-wave；
+    SUCCESS/ERROR → cheer；SLEEPING → idle（无专属 sleep 素材，暂兜底到 idle）。
+  - `walk: { "left": "walk-left", "right": "walk-right", "speed": 55, "margin": 20 }`。
+  - 注册进 `pets/index.json`：`{ "id": "baicang", "name": "白藏", "renderers": ["webm"], "path": "baicang/pet.json" }`。
+
+#### work（✅ 已跑通，补充生产）
+
+- **AI 产出**：`green-work.mp4`，640×832 / H.264 / 24fps / 5.17s（124 帧），纯绿幕。中段是侧身打拳/格斗训练动作，
+  首尾回正面站立待机姿势。
+- **转码**：与 idle 相同命令，产出 `work.webm`（640×832 / VP9 / ALPHA_MODE=1 / 1.86MB）。
+- **验收**：用 `-c:v libvpx-vp9 -pix_fmt rgba` 显式解码首/中/尾帧还原真实透明通道叠品红底检查，
+  edge 像素绿色调占比 0%，无绿边残留，首尾站姿一致。
+- **接入**：`pet.json` 新增 `actions.work`（对象式 loop 全段），加入 `chain.actions` 随机动作池；
+  `stateActions.WORKING/CODING/RUNNING_COMMAND` 由此前兜底的 `think` 改为更贴切的 `work`。
+
+#### 循环区间标定（用 tools/frame-inspector 人工核对后更新）
+
+walk-left/walk-right/walk-towards/drag 的循环区间已用帧检查器工具人工核对姿态相位后更新：
+`walk-left: loopFrom 27 / loopTo 66`，`walk-right: loopFrom 42 / loopTo 75`，
+`walk-towards: loopFrom 36 / loopTo 67`，`drag` 追加 `from 49 / to 89`（配合原 loop 全段兜底）。
+不再是集成时的占位 `loopFrom:0/loopTo:-1`。
+
+#### 待生产
+白藏当前全身动作 9 条（idle/cheer/dance1/drag/click-wave/think/work/walk-left/walk-right/walk-towards），
+无 sleep/error 专属素材，暂用 idle/cheer 兜底。后续如需专属 sleep/error 动作、半身表情特写，
+按残红/早雾的经验（`tools/frame-inspector` 辅助人工核对 + loopFrom/loopTo 精调）补齐。
+
+
+
+### 坎特蕾拉（cantarella）
+
+**素材目录**：`pets/cantarella/assets/`（角色专属）。竖幅角色，来自游戏《鸣潮》，
+`geometry: { "aspect": 0.7241, "feetRatio": 0.96 }`（672×928）——分辨率与早雾/白藏不同（672 而非 640 宽），
+沿用素材原始分辨率转码，未强行统一到 640 宽，前端按比例缩放不受影响。
+
+#### idle + angry / cheer / happy / love / sad / surprise / work / walk-left / walk-right（✅ 已跑通，一次性全量转码）
+
+- **AI 产出**：10 条 mp4，全部 **672×928（竖版）/ H.264 / 24fps / 4.46s（107 帧）**，规格完全统一，纯绿幕 `#00FF00`。
+- **脚线实测**：Python + Pillow/Numpy 前景包围盒分析（`g - max(r,b) > 25`），idle 首尾帧脚线稳定在
+  **y=891/928 ≈ 0.960**（行宽平滑过渡到 0，无阴影拖尾干扰），水平居中 0.493~0.501。`feetRatio` 定为 **0.96**。
+- **转码命令**（与残红/早雾/白藏相同的 chromakey+despill 管线，`scale/pad` 改为该角色专属的 672×928）：
+  ```sh
+  ffmpeg -y -i idle.mp4 -vf "\
+  chromakey=0x00FF00:0.12:0.06,\
+  despill=type=green:mix=0.5:expand=0.3,\
+  format=yuva420p,\
+  scale=672:928:force_original_aspect_ratio=decrease,\
+  pad=672:928:(ow-iw)/2:(oh-ih)/2:color=0x00000000\
+  " -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 28 -an idle.webm
+  ```
+  其余 9 条同一命令批量转码（仅替换文件名）。因规格完全一致，本次一次性无脑批量转码全部素材，未逐条分析首尾帧。
+- **验收**：`ffprobe` 确认全部 10 条均 672×928 / VP9 / 24fps / `ALPHA_MODE=1`；用 `-c:v libvpx-vp9 -pix_fmt rgba`
+  显式解码 idle 中间帧还原真实透明通道叠品红底检查，edge 像素绿色调占比 0%，发丝/裙摆边缘干净无绿边残留。
+  playground 加载验证：素材信息栏显示"动作 10 个"，全部动作按钮正常渲染，脚线贴底、透明合成干净。
+- **循环区间**：全部非 idle 动作暂用占位 `loop: true, loopFrom: 0, loopTo: -1`（整段循环），
+  未做逐帧顺拐分析——按项目约定，精确循环点留给人工用 `tools/frame-inspector` 工具核对后再调整。
+- **接入**：`pets/cantarella/pet.json` 新建——
+  - `actions`：`idle` 单独（非 loop 对象），其余 9 条（angry/cheer/happy/love/sad/surprise/work/walk-left/walk-right）
+    均用对象式 `loop: true, loopFrom: 0, loopTo: -1`。
+  - `chain.idle: ["idle"]`、`chain.actions: ["happy","love","sad","surprise","work","walk-left","walk-right"]`、
+    `chain.clicks: ["cheer","happy"]`。
+  - `stateActions`：THINKING/WORKING/CODING/RUNNING_COMMAND → work；STARTING/SUCCESS → cheer；
+    ERROR → angry；WAITING_FOR_USER → surprise；SLEEPING → idle（无专属 sleep 素材，暂兜底）。
+  - `intentMap`：greet/celebrate → cheer，happy/love/sad/angry → 对应同名情绪动作，surprised → surprise，think → work。
+  - `walk: { "left": "walk-left", "right": "walk-right", "speed": 55, "margin": 20 }`。
+  - 注册进 `pets/index.json`：`{ "id": "cantarella", "name": "坎特蕾拉", "renderers": ["webm"], "path": "cantarella/pet.json" }`。
+- **人设**：`pets/cantarella/soul.md` 已仿照 `blue-whale/soul.md` 的结构写好（身份/性格/说话风格/与用户关系/行为准则），
+  融入了原设定的"阳奉阴违但心怀正义""擅长伪装""反对以牺牲弱者为名的所谓必要性""纠结时摸蓝宝石吊坠"等要点。
+
+#### 待生产
+坎特蕾拉当前全身动作 10 条，无专属 sleep/error 素材（暂用 idle/angry 兜底）。走路循环区间、
+角色是否左右不对称（是否需要各自生成 walk-left/right 而非镜像，本次已各自独立提供未镜像）、
+更多点击变体等，均可后续按残红/早雾的经验补齐。

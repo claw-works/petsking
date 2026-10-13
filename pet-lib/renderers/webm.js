@@ -114,19 +114,30 @@ export class WebmRenderer extends RendererBase {
 
     // rAF 逐帧轮询 currentTime 检测循环终点，比 ontimeupdate（浏览器约 250ms 才触发一次）精度高一个量级，
     // 避免回跳判定滞后导致「loopTo 多播了几帧」。每次回跳后要重新调度，否则只循环一次。
+    //
+    // 竞态注意：el.currentTime = loopFromSec 是异步 seek，不会立刻生效。如果回跳后立刻又用 rAF
+    // 轮询 currentTime，很可能读到 seek 完成前的旧值（仍 ≥ loopToSec），导致 atLoopEnd 被连续
+    // 重复触发、反复重新 seek/play，最终停在不可预测的位置。用 seeking 标记 + seeked 事件门控：
+    // 回跳发出后先转入「等待 seek 完成」状态，watchLoop 暂停判断，seeked 触发后才恢复轮询。
+    let seekingBack = false;
     const watchLoop = () => {
       if (this.gen !== gen) return;
-      if (el.currentTime >= loopToSec) { atLoopEnd(); return; }
+      if (!seekingBack && el.currentTime >= loopToSec) { atLoopEnd(); return; }
       this._loopRaf = requestAnimationFrame(watchLoop);
     };
     const atLoopEnd = () => {
       if (this.gen !== gen) return;
       if (!d.loop) { if (this._onEnded) this._onEnded(d.action); return; }
+      seekingBack = true;
+      const onSeeked = () => {
+        el.removeEventListener('seeked', onSeeked);
+        if (this.gen !== gen) return;
+        seekingBack = false;
+        el.play().catch(() => {});
+        if (loopToSec != null) this._loopRaf = requestAnimationFrame(watchLoop);
+      };
+      el.addEventListener('seeked', onSeeked);
       el.currentTime = loopFromSec;
-      el.play().catch(() => {});
-      // 只有 rAF 轮询模式（loopToSec 有限）才需要重新排下一次监测；
-      // onended 模式靠 video 的 ended 事件自然触发，不需要 rAF。
-      if (loopToSec != null) this._loopRaf = requestAnimationFrame(watchLoop);
     };
     this._stopLoopWatch();
     if (d.still) {

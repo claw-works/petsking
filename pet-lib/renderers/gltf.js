@@ -303,12 +303,13 @@ export class GltfRenderer extends RendererBase {
   }
 
   _onOnceEnd() {
+    const finishedAction = this.currentAction;
     const idle = this._idleSpec();
     if (idle && !idle.once && this.character.play(idle.clip, { fade: 0.5 })) {
       this.character.setYaw(((idle.yaw ?? this._facingYawDeg()) * Math.PI) / 180);
       this.currentAction = idle.action;
     } // 没有可回的待机 clip：停在末帧，只通知播完
-    if (this._onEnded) this._onEnded();
+    if (this._onEnded) this._onEnded(finishedAction);
   }
 
   setFacing(dir) {

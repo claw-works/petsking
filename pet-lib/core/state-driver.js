@@ -163,6 +163,14 @@ export class StateDriver extends DriverBase {
     if (c && c.clicks.length) c.click();
   }
 
+  /** loop:false 动作（如 click() 触发的反应）自然播完 → 强制重新求值一次状态，
+   *  没有更高优先级任务时会自然落回当前语义状态对应的（循环）动作，不会停在最后一帧。 */
+  onEnded(action) {
+    if (action !== this.current) return; // 已经被切走，忽略过期回调
+    this.lastChangeAt = 0; // 绕开 minStateMs 节流，确保立即重新 emit
+    this._emitState(this.state);
+  }
+
   get semanticState() { return this.state; }
 }
 

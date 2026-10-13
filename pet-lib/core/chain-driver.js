@@ -94,6 +94,14 @@ export class ChainDriver extends DriverBase {
     if (this.timer) clearTimeout(this.timer);
     if (!this.paused) this.timer = setTimeout(() => this.pickNext(), this._ms(perf.action));
   }
+
+  /** loop:false 动作（如点击回应）自然播完 → 不等 playMs，立即掷骰进入下一个（通常回 idle）。 */
+  onEnded(action) {
+    if (this.paused) return;
+    if (action !== this.current) return; // 已经被切走，忽略过期回调
+    if (this.timer) clearTimeout(this.timer);
+    this.pickNext();
+  }
 }
 
 registerDriver('chain', ChainDriver);

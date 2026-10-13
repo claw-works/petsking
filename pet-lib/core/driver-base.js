@@ -23,6 +23,9 @@ export class DriverBase {
   stop() {}
   feed(_input) {}   // 默认忽略外部信号（chain 是自主的）
   click() {}
+  /** 渲染器报告一个 loop:false 的动作已经自然播完（见 renderer.onEnded）。
+   *  默认不处理；需要「播完立即接下一个」的驱动（chain/statemachine）各自覆写。 */
+  onEnded(_action) {}
 }
 
 export const DRIVERS = {};

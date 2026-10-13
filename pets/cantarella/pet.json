@@ -1,0 +1,74 @@
+{
+  "id": "cantarella",
+  "renderer": "webm",
+  "renderers": ["webm"],
+  "meta": {
+    "name": "坎特蕾拉(鸣潮)",
+    "author": "pet-study",
+    "description": "来自游戏《鸣潮》的坎特蕾拉。竖幅 672×928 透明 VP9-alpha webm 桌宠，原分辨率保留、前端软件缩放。素材来自游戏画面截图并由 AI 辅助生成，仅供研究学习。"
+  },
+  "assetsDir": "assets/",
+  "geometry": {
+    "aspect": 0.7241,
+    "feetRatio": 0.96
+  },
+  "fps": 24,
+  "actions": {
+    "idle": "idle.webm",
+    "angry": { "file": "angry.webm", "loop": true, "loopFrom": 0, "loopTo": -1 },
+    "cheer": { "file": "cheer.webm", "loop": false, "loopFrom": 0, "loopTo": -1 },
+    "happy": { "file": "happy.webm", "loop": false, "loopFrom": 0, "loopTo": -1 },
+    "love": { "file": "love.webm", "loop": false, "loopFrom": 0, "loopTo": -1 },
+    "sad": { "file": "sad.webm", "loop": true, "loopFrom": 0, "loopTo": -1 },
+    "surprise": { "file": "surprise.webm", "loop": false, "loopFrom": 0, "loopTo": -1 },
+    "work": { "file": "work.webm", "loop": true, "loopFrom": 0, "loopTo": -1 },
+    "walk-left": { "file": "walk-left.webm", "loop": true, "loopFrom": 34, "loopTo": 103 },
+    "walk-right": { "file": "walk-right.webm", "loop": true, "loopFrom": 37, "loopTo": 74 },
+    "greet": { "file": "greet.webm", "loop": false, "loopFrom": 0, "loopTo": -1 },
+    "think": { "file": "think.webm", "loop": true, "loopFrom": 46, "loopTo": 84 },
+    "beg": { "file": "beg.webm", "loop": true, "loopFrom": 0, "loopTo": -1 },
+    "sleepy": { "file": "sleepy.webm", "loop": true, "loopFrom": 0, "loopTo": -1 },
+    "dance": { "file": "dance.webm", "loop": true, "loopFrom": 0, "loopTo": -1 }
+  },
+  "chain": {
+    "idle": ["idle"],
+    "actions": ["happy", "love", "sad", "surprise", "work", "think", "beg", "dance", "walk-left", "walk-right"],
+    "categories": [],
+    "clicks": ["cheer", "happy"],
+    "weights": { "idle": 55, "action": 45 }
+  },
+  "stateActions": {
+    "STARTING": "greet",
+    "IDLE": "idle",
+    "THINKING": "think",
+    "WORKING": "work",
+    "CODING": "work",
+    "RUNNING_COMMAND": "work",
+    "WAITING_FOR_USER": "beg",
+    "SUCCESS": "cheer",
+    "ERROR": "angry",
+    "SLEEPING": "sleepy"
+  },
+  "intentMap": {
+    "greet": "greet",
+    "happy": "happy",
+    "celebrate": "cheer",
+    "love": "love",
+    "sad": "sad",
+    "angry": "angry",
+    "surprised": "surprise",
+    "think": "think",
+    "sleepy": "sleepy",
+    "dance": "dance"
+  },
+  "emotes": {
+    "aspect": 0.7241,
+    "actions": {}
+  },
+  "walk": {
+    "left": "walk-left",
+    "right": "walk-right",
+    "speed": 55,
+    "margin": 20
+  }
+}

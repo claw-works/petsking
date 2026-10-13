@@ -1,7 +1,7 @@
-// dashboard.js — Instance 分类列表页
+// dashboard.js — 宠物列表页
 //
-// 读 pets/index.json + 各 pet.json，把「素材包 × 它支持的每个渲染器」展开成一个个 instance，
-// 按渲染方案分组展示。点卡片 → 跳 playground?pet=<id>&renderer=<r>。
+// 读 pets/index.json + 各 pet.json，把「素材包 × 它支持的每个渲染器」展开成一个个卡片，
+// 按渲染方案分组展示，卡片用 avatar.webp 做头图。点卡片 → 跳 playground?pet=<id>&renderer=<r>。
 
 const PETS_BASE = '../pets/';
 
@@ -48,7 +48,7 @@ async function main() {
     if (!list || !list.length) continue;
     const group = document.createElement('div');
     group.className = 'group';
-    group.innerHTML = `<h2>${info.icon} ${info.name} <span class="count">${list.length}</span></h2>`;
+    group.innerHTML = `<h2><span class="icon">${info.icon}</span> ${info.name} <span class="count">${list.length}</span></h2>`;
     const grid = document.createElement('div');
     grid.className = 'grid';
     for (const pack of list) {
@@ -57,15 +57,24 @@ async function main() {
       const playgroundHref = `../playground/?pet=${encodeURIComponent(pack.id)}&renderer=${encodeURIComponent(r)}`;
       const chatHref = `../chat/index.html?pet=${encodeURIComponent(pack.id)}`;
       const canChat = pack.chat === true;
+      const avatarUrl = `${PETS_BASE}${pack.id}/avatar.webp`;
+      const displayName = pack.meta.name || pack.name || pack.id;
       card.innerHTML =
-        `<div class="ico">${info.icon}</div>` +
-        `<h3>${pack.meta.name || pack.name || pack.id}</h3>` +
-        `<p>${pack.meta.description || ''}</p>` +
-        `<div class="rtags">${(pack.renderers || []).map((x) => `<span class="rtag">${x}</span>`).join('')}` +
-        `<span class="rtag" style="background:rgba(255,255,255,0.06);color:#8a90ad">${pack.actions} 动作</span></div>` +
-        `<div class="card-actions">` +
-          `<a href="${playgroundHref}">🎭 展示皮肤 →</a>` +
-          (canChat ? `<a href="${chatHref}">💬 互动 →</a>` : '') +
+        `<a href="${playgroundHref}" class="avatar-wrap">` +
+          `<img src="${avatarUrl}" alt="${displayName}" loading="lazy" ` +
+            `onerror="this.remove();this.parentElement.querySelector('.fallback-ico').style.display='grid'" />` +
+          `<span class="fallback-ico" style="display:none">${info.icon}</span>` +
+          `<span class="rcorner">${r}</span>` +
+        `</a>` +
+        `<div class="body">` +
+          `<h3>${displayName}</h3>` +
+          `<p>${pack.meta.description || ''}</p>` +
+          `<div class="rtags">${(pack.renderers || []).map((x) => `<span class="rtag">${x}</span>`).join('')}` +
+          `<span class="rtag muted">${pack.actions} 动作</span></div>` +
+          `<div class="card-actions">` +
+            `<a class="primary" href="${playgroundHref}">🎭 展示</a>` +
+            (canChat ? `<a href="${chatHref}">💬 互动</a>` : '') +
+          `</div>` +
         `</div>`;
       grid.appendChild(card);
     }
@@ -73,7 +82,7 @@ async function main() {
     groupsEl.appendChild(group);
   }
 
-  if (!groupsEl.childElementCount) groupsEl.textContent = '暂无 instance';
+  if (!groupsEl.childElementCount) groupsEl.textContent = '暂无宠物';
 }
 
 main();

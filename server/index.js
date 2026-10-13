@@ -40,7 +40,7 @@ const PET_REGISTRY = buildPetRegistry(petsIndex, {
 
 const STATIC_ALLOWLIST = ['chat/', 'pets/', 'pet-lib/', 'dashboard/', 'playground/', 'docs/', 'assets/', 'tools/', 'index.html'];
 
-async function serveStatic(pathname) {
+async function serveStatic(pathname, req) {
   // url.pathname is already dot-segment-normalized by the URL constructor, so this
   // can't currently be hit — kept as defense-in-depth in case pathname is ever
   // built differently (e.g. from a raw header) without that normalization.
@@ -49,8 +49,33 @@ async function serveStatic(pathname) {
   if (rel.endsWith('/')) rel += 'index.html';
   if (!STATIC_ALLOWLIST.some((prefix) => rel.startsWith(prefix))) return null;
   const file = Bun.file(new URL(rel, ROOT));
-  if (await file.exists()) return new Response(file);
-  return null;
+  if (!(await file.exists())) return null;
+
+  // 支持 Range 请求（HTTP 206 Partial Content）：webm/mp4 等媒体文件的 <video> seek
+  // 依赖服务器正确响应 Range，否则浏览器会把资源标记为不可随机访问（seekable=[0,0]），
+  // 导致 pet-lib 的 webm 渲染器 loopFrom/loopTo 循环回跳全部失效（seek 请求被归零）。
+  const range = req.headers.get('range');
+  const size = file.size;
+  if (range) {
+    const m = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (m) {
+      const start = m[1] ? parseInt(m[1], 10) : 0;
+      const end = m[2] ? Math.min(parseInt(m[2], 10), size - 1) : size - 1;
+      if (start <= end && start < size) {
+        return new Response(file.slice(start, end + 1), {
+          status: 206,
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+            'Content-Range': `bytes ${start}-${end}/${size}`,
+            'Content-Length': String(end - start + 1),
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+      return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+    }
+  }
+  return new Response(file, { headers: { 'Accept-Ranges': 'bytes' } });
 }
 
 Bun.serve({
@@ -107,7 +132,7 @@ Bun.serve({
       return Response.json({ messages });
     }
 
-    const staticRes = await serveStatic(url.pathname);
+    const staticRes = await serveStatic(url.pathname, req);
     if (staticRes) return staticRes;
 
     return new Response('not found', { status: 404 });

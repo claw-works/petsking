@@ -172,6 +172,14 @@ export class DeskPet {
     if (type === 'statemachine') dc = { stateActions: this.pack.stateActions || {}, chain: this.pack.chain || null, ...dc };
     this.driver = createDriver(type, dc);
     this.driver.onAction((action, meta) => this._onDriverAction(action, meta));
+    this._bindRendererEnded(this.renderer);
+  }
+
+  _bindRendererEnded(renderer) {
+    if (!renderer) return;
+    renderer.onEnded((action) => {
+      if (!this._destroyed && this.renderer === renderer && this.driver) this.driver.onEnded(action);
+    });
   }
 
   /** 驱动输出：播动作 + 走动 + 状态表情/手势 + 状态语音 */
@@ -250,6 +258,7 @@ export class DeskPet {
     this._appliedGesture = undefined;
     this._appliedGestureSeq = undefined;
     this._refreshLook();
+
   }
 
   /** 根据当前动作决定是否让宠物水平位移（走动时同步平移整个容器）。 */
@@ -345,6 +354,7 @@ export class DeskPet {
     // 挂载期间宠物被销毁 / 又被更新的 setRenderer 取代：挂载完成后再销毁一次（有的渲染器 mount 末尾才挂 DOM）
     if (this._destroyed || this.renderer !== r) { r.destroy(); return this; }
     this._syncRendererLook();
+    this._bindRendererEnded(r);
     // init 在挂载期间被打断时可能还没有驱动：跳过驱动接线
     if (this.driver) {
       this.driver.onAction((action, meta) => this._onDriverAction(action, meta));

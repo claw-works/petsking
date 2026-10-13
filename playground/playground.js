@@ -64,7 +64,7 @@ async function rebuild() {
 // —— 手动交互 / 空闲恢复 ——
 // 点面板按钮 = 手动操作：暂停概率链，避免它在背后插动作；
 // 空闲一段时间无操作，自动恢复概率链（自主陪伴）。
-const IDLE_RESUME_MS = 15000;
+const IDLE_RESUME_MS = 60000;
 let idleTimer = null;
 // 只重置空闲计时（不停驱动）——用于状态机测试，保持状态机运转
 function armIdleResume() {
@@ -102,9 +102,29 @@ function renderActionGrid() {
   Object.keys(manifest.actions || {}).forEach((a) => {
     const b = document.createElement('button');
     b.textContent = a;
-    b.addEventListener('click', () => { if (pet) { manualHold(); pet.play(a, { loop: true }); log('预览: ' + a); } });
+    b.addEventListener('click', () => { if (pet) { manualHold(); previewAction(a); log('预览: ' + a); } });
     grid.appendChild(b);
   });
+}
+
+// 手动预览用：非循环动作（pet.json 里 loop:false）自然播完后，自动接回 idle，
+// 不然手动预览路径绕开了 driver（manualHold 已 stop() 驱动），播完会停在最后一帧不动。
+let previewToken = 0;
+function previewAction(name) {
+  const token = ++previewToken;
+  const def = manifest.actions[name];
+  const isLooping = typeof def === 'string' ? true : def.loop !== false;
+  pet.play(name, { loop: true });
+  if (isLooping) return;
+  setTimeout(() => {
+    if (token !== previewToken) return; // 期间又点了别的预览，放弃接回
+    const v = frontVideo();
+    if (!v) return;
+    const back = () => { if (token === previewToken && pet) pet.play('idle', { loop: true }); };
+    v.addEventListener('ended', back, { once: true });
+    const ms = (isFinite(v.duration) && v.duration > 0 ? v.duration * 1000 : 3000) + 200;
+    setTimeout(() => { if (token === previewToken && v.ended) back(); }, ms);
+  }, 200); // 给渲染器交叉淡入 + loadeddata 一点时间
 }
 
 // —— 序列测试：按顺序衔接播放多个动作（前面播完接下一个，最后一个循环）——
