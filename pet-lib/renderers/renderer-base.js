@@ -1,6 +1,6 @@
 // renderer-base.js — 渲染器统一接口
 //
-// 所有渲染器（webm/gif/spritesheet/pixel/svg/three）都实现同一套接口，
+// 所有渲染器（webm/gif/spritesheet/pixel/svg/three/gltf 共七种）都实现同一套接口，
 // 这样 DeskPet 主类可以无差别地组合任意渲染器 + 任意驱动 + 任意素材包。
 //
 // 渲染器只负责「把某个动作画出来」，不关心动作是怎么选的（那是 Driver 的事）。

@@ -43,6 +43,9 @@ import { Voice } from './voice/voice.js';
 import { loadVoicePack } from './voice/voice-pack.js';
 import { resolveLook } from './core/look.js';
 
+// 语音没播成时退回气泡的原因（冷却 / 台词不存在 / 无音频）；被锁 / 关闭语音等情况 _talk 已经冒过气泡
+const SAY_FALLBACK_REASONS = ['cooldown', 'unknown-line', 'no-src'];
+
 let styleInjected = false;
 function injectStyle() {
   if (styleInjected) return; styleInjected = true;
@@ -117,9 +120,13 @@ export class DeskPet {
     this._voicePackP = this.pack.voices
       ? loadVoicePack(this.pack.voices).catch((e) => { console.warn('[pet] voice pack', e); return null; })
       : Promise.resolve(null);
-    // 浏览器自动播放策略：第一次用户手势时唤醒 AudioContext
-    this._unlockAudio = () => this.voiceEngine.unlock();
-    document.addEventListener('pointerdown', this._unlockAudio, { once: true, capture: true });
+    // 浏览器自动播放策略：第一次用户手势时唤醒 AudioContext。
+    // 只有带预录语音包的宠物才提前挂监听；其余宠物等到第一次说话时再惰性唤醒（见 _talk），
+    // 从不说话的宠物（如 webm）不会创建 AudioContext。
+    if (this.pack.voices) {
+      this._unlockAudio = () => this.voiceEngine.unlock();
+      document.addEventListener('pointerdown', this._unlockAudio, { once: true, capture: true });
+    }
   }
 
   _buildDom() {
@@ -173,9 +180,23 @@ export class DeskPet {
     this._applyMove(action);
     this._applyLook(meta);
     // 点击触发的台词是用户主动交互：不受、也不占用自动语音冷却
-    if (meta.voice) this.voice(meta.voice, { auto: meta.kind !== 'CLICK' });   // 不传 meta.expression：状态/点击表情走各自的层
+    // 不传 meta.expression：状态/点击表情走各自的层
+    this._voiceOrSay(meta.voice, meta.say, { auto: meta.kind !== 'CLICK' });
     this._emit('action', { action, meta });
     if (meta.kind) this._emit('state', { state: meta.kind, action });
+  }
+
+  /**
+   * 有台词就播台词，没播成（SAY_FALLBACK_REASONS）且有 say 时退回气泡；没有台词只有 say 直接冒泡。
+   * perform 与驱动动作（stateActions / chain.clicks 的表演对象）共用这条规则。
+   */
+  _voiceOrSay(voice, say, { auto = true } = {}) {
+    if (voice) {
+      this.voice(voice, { auto }).then((res) => {
+        if (this._destroyed || !say || !res || res.played) return;
+        if (SAY_FALLBACK_REASONS.includes(res.reason)) this.say(say);
+      });
+    } else if (say) this.say(say);
   }
 
   /** 生成一个外观层对象；带手势时分配新的 seq（让重复的同名一次型手势也能重新触发） */
@@ -299,7 +320,13 @@ export class DeskPet {
   }
 
   // —— 驱动函数（对外）——
-  play(action, meta) { if (this.renderer) this.renderer.play(action, meta || { loop: false }); this._emit('action', { action, meta }); return this; }
+  /** 手动播一个动作；非走动动作会停下正在进行的水平位移（否则走到边缘的 pickNext 会顶掉它） */
+  play(action, meta) {
+    if (this.renderer) this.renderer.play(action, meta || { loop: false });
+    this._applyMove(action);
+    this._emit('action', { action, meta });
+    return this;
+  }
   feed(ev) { if (this.driver && this.driver.feed) this.driver.feed(ev); return this; }
   react(intent, opts) { if (this.bridge) return this.bridge.reactTo(intent, opts); this.play(intent, { loop: false }); }
   clickAction() { if (this.driver && this.driver.click) this.driver.click(); }
@@ -335,19 +362,18 @@ export class DeskPet {
   perform(perf, { kind, silent = false } = {}) {
     if (!perf || this._destroyed) return this;
     if (perf.action) {
+      // play() 内部 _applyMove：非走动动作会停下水平位移
       this.play(perf.action, { loop: false, kind });
-      // 概率链让路：表演动作播放期间不被下一次掷骰顶掉（StateDriver 无 hold 则跳过）
-      if (this.driver && typeof this.driver.hold === 'function') this.driver.hold(perf.holdMs ?? 8000);
+      // 概率链让路：表演动作播放期间不被下一次掷骰顶掉。时长按驱动对该动作的 playMs
+      // （未配置时是驱动的随机默认值）；holdMs 只管外观层，不用于让路。
+      if (this.driver && typeof this.driver.hold === 'function') {
+        this.driver.hold(this.driver.playMsFor ? this.driver.playMsFor(perf.action) : 8000);
+      }
     }
     if (perf.expression || perf.gesture) {
       this._setReact(perf.expression, perf.gesture, perf.holdMs);
     }
-    if (perf.voice && !silent) {
-      this.voice(perf.voice, { auto: true }).then((res) => {
-        if (this._destroyed || !perf.say || !res || res.played) return;
-        if (['cooldown', 'unknown-line', 'no-src'].includes(res.reason)) this.say(perf.say);
-      });
-    } else if (perf.say) this.say(perf.say);
+    this._voiceOrSay(silent ? null : perf.voice, perf.say, { auto: true });
     return this;
   }
 
@@ -408,6 +434,8 @@ export class DeskPet {
     if (this._destroyed) return { played: false, reason: 'destroyed' };
     if (text) this.say(text, Math.max(2600, text.length * 220));
     if (!this.voiceEnabled) return { played: false, reason: 'disabled' };
+    // 惰性唤醒音频：已有过用户手势就现在创建/恢复 AudioContext（没挂 pointerdown 监听的宠物靠这里）
+    if (this.voiceEngine.unlocked) this.voiceEngine.unlock();
     const tok = ++this._talkToken;
     clearTimeout(this._talkLookT);
     // 'neutral' 视为未设置：否则说话层会遮住状态/意图层的表情

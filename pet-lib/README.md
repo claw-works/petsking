@@ -219,8 +219,11 @@ await pet.llm.react('用户夸了它很可爱');  // 模型返回 {intent, say}�
 
 `chain.playMs` 决定一个动作播多久后再掷骰，可以是数字、函数 `(action)=>ms`，或按动作的映射
 `{ "<action>": ms, "default": ms }`（未命中且无 `default` 时随机 8~20s）。时长较长的 clip（如待机小动作）
-应在这里按动作声明。点击 / 意图 / 表演打断时 pet 会调用 `driver.hold()` 让概率链让路，避免刚做完反应就被链条立刻切走；
-走到屏幕边缘时会立即触发下一次挑选。
+应在这里按动作声明。意图 / 表演打断时 pet 会调用 `driver.hold(driver.playMsFor(动作))` 让概率链让路
+（让路时长 = 该动作的 `playMs`；表演对象的 `holdMs` 只管表情/手势保持多久），避免刚做完反应就被链条立刻切走；
+手动 `play()` / 表演的非走动动作会停下正在进行的水平走动；走到屏幕边缘时会立即触发下一次挑选。
+`statemachine` 驱动在 IDLE（委托内部概率链）时同样支持 `hold` / `pickNext` / `playMsFor`，
+未配置 `clickAction` 时点击会走概率链的 `clicks` 表演。
 
 现有示范包（`pets/index.json`）：`blue-whale`(webm) · `whale-gif`(gif) ·
 `pixel-puff`(pixel) · `chibi-svg`(svg) · `chibi-3d`(three) · `qingxiao`(gltf)。
@@ -237,6 +240,7 @@ await pet.llm.react('用户夸了它很可爱');  // 模型返回 {intent, say}�
 
 - 状态（stateActions）：进入状态时切表情 / 手势、播语音；离开时恢复。
 - 意图（intentMap）/ 点击（clicks）：一次性，表情/手势保持 `holdMs`（默认 3s）后恢复。
+- 带 `voice` 的表演：台词没播成（冷却 / 台词不存在 / 无音频）且写了 `say` 时退回 `say` 气泡；没有 `voice` 只有 `say` 直接冒泡（状态 / 点击 / 意图同一规则）。
 - 渲染器不支持的部分自动忽略（webm 宠物也能用 voice/say）。
 
 ### 表情 / 手势分层（`core/look.js`）

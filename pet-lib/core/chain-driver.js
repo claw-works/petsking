@@ -51,6 +51,9 @@ export class ChainDriver extends DriverBase {
   }
   _defaultMs() { return 8000 + Math.random() * 12000; }
 
+  /** 某个动作的展示时长（ms）：按 playMs 配置，未配置时为随机默认值。DeskPet.perform 用它决定让路多久 */
+  playMsFor(action) { return this._ms(action); }
+
   /** 让路：清掉当前定时器，ms 后再掷骰（不发动作；暂停时不排期） */
   hold(ms) {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }

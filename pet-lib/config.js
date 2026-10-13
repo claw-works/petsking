@@ -3,7 +3,7 @@
 // 一份 DeskPet 配置长这样（所有字段可选，缺省走默认）：
 // {
 //   pet: 'blue-whale' | { ...内联素材包 } | 'pets/xxx/pet.json'(url),
-//   renderer: 'webm'|'gif'|'spritesheet'|'pixel'|'svg'|'three',  // 缺省取素材包声明
+//   renderer: 'webm'|'gif'|'spritesheet'|'pixel'|'svg'|'three'|'gltf',  // 缺省取素材包声明
 //   driver: 'chain'|'statemachine',                              // 缺省 chain
 //   driverConfig: {...},        // 覆盖驱动参数
 //   scene: 'desktop-corner' | {...},   // 布局（位置/尺寸/角落/可拖拽）
@@ -30,6 +30,12 @@ export const DEFAULT_CONFIG = {
   ai: { enabled: false },
   voice: { enabled: true, cooldownMs: 8000, lang: 'zh-CN' },  // tts 可注入 provider（见 voice/tts.js）
 };
+
+// pet.json 顶层 → assets 的透传字段（assets 里已有同名字段时不覆盖）
+//   位图 / 像素 / svg：geometry grid sheet palette frames colors frameMs fps aspect
+//   three / gltf：model autoSpin camera turnDeg shadow expressions blush fur springBones gestureBones
+const PASS_KEYS = ['geometry', 'grid', 'sheet', 'palette', 'frames', 'colors', 'model', 'frameMs', 'autoSpin', 'fps',
+  'camera', 'turnDeg', 'shadow', 'expressions', 'blush', 'fur', 'springBones', 'gestureBones', 'aspect'];
 
 /** 内置场景预设：布局与交互 */
 export const SCENES = {
@@ -58,7 +64,9 @@ export function mergeConfig(user = {}) {
  *   1) 内联对象（已含 renderer/actions/...）
  *   2) pet.json 的 url 字符串
  *   3) 约定路径名（相对 petsBaseUrl，如 'blue-whale' → petsBaseUrl+'blue-whale/pet.json'）
- * 返回规范化的 assetpack：{ id, renderer, assets, chain, stateActions, meta }
+ * 返回规范化的 assetpack：
+ *   { id, renderer, assets, chain, stateActions, intentMap, emotes, walk, voices, fps, meta }
+ *   assets 里含 baseUrl / actions，以及从 pet.json 顶层透传的渲染器字段（见下方 PASS_KEYS）
  */
 export async function loadAssetPack(pet, petsBaseUrl = 'pets/') {
   let manifest, baseDir;
@@ -80,8 +88,7 @@ export async function loadAssetPack(pet, petsBaseUrl = 'pets/') {
   if (assets.baseUrl == null) assets.baseUrl = baseDir + (manifest.assetsDir || 'assets/');
   else if (!/^https?:|^\//.test(assets.baseUrl)) assets.baseUrl = baseDir + assets.baseUrl;
   // 透传渲染几何/网格/调色板等
-  for (const k of ['geometry', 'grid', 'sheet', 'palette', 'frames', 'colors', 'model', 'frameMs', 'autoSpin', 'fps',
-    'camera', 'turnDeg', 'shadow', 'expressions', 'blush', 'fur', 'springBones', 'gestureBones', 'aspect']) {
+  for (const k of PASS_KEYS) {
     if (manifest[k] != null && assets[k] == null) assets[k] = manifest[k];
   }
   if (assets.actions == null) assets.actions = manifest.actions || {};

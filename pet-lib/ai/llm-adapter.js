@@ -48,7 +48,8 @@ export class LlmAdapter {
     if (!this.complete) throw new Error('LlmAdapter 需要注入 complete(prompt) 函数');
     const raw = await this.complete(this._prompt(context));
     const { intent, say } = this._parse(raw);
-    if (this.pet.bridge) this.pet.bridge.reactTo(intent);
+    // 有 say 时跳过意图自带的预录台词：否则台词气泡会和模型的 say 气泡互相覆盖
+    if (this.pet.bridge) this.pet.bridge.reactTo(intent, { silent: !!say });
     else this.pet.play(intent, { loop: false });
     if (say) this.onSay(say);
     return { intent, say };

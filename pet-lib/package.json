@@ -8,6 +8,7 @@
     ".": "./index.js",
     "./voice": "./voice/index.js"
   },
+  "files": ["**/*.js", "!**/*.test.js", "README.md"],
   "peerDependencies": { "three": ">=0.160.0" },
   "peerDependenciesMeta": { "three": { "optional": true } },
   "license": "MIT"
