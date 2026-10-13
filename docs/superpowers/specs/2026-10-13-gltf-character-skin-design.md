@@ -23,6 +23,8 @@ pet-lib 的**通用能力**——pet-lib 定位是角色皮肤系统，后续别
 - 不改现有 `three`（程序化 chibi）渲染器。
 - 不移植 qingxiao 的角色卡页、OrbitControls 展示页、头像截图缓存。
 - 不做 webm 宠物的口型（webm 宠物也能 `speak`，只是只有声音 + 气泡）。
+- 不制作新的骨骼动画 clip。挥手 / 欢呼等全身大动作需要在 DCC 里做或重定向后导出进 GLB，属于素材工作；
+  素材包结构已支持，加 clip 后只改 pet.json。
 
 ## 架构
 
@@ -43,7 +45,8 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
 | `setExpression(name)` | 切表情预设；未知名字回落 `neutral` |
 | `listExpressions()` | 返回 `[{ id, label }]`，默认 `[]` |
 | `setMouth(frame \| null)` | 口型帧。`{ open, wide, round }`（音频分析，0..1）或 `{ viseme }`（按字估算）；`null` 闭嘴 |
-| `get capabilities` | `{ expression: bool, mouth: bool }`，playground 据此决定显示哪些面板 |
+| `setGesture(name \| null)` / `listGestures()` | 程序化头部 / 上身小动作（见下） |
+| `get capabilities` | `{ expression, mouth, gesture }`（bool），playground 据此决定显示哪些面板 |
 
 **新文件**：
 
@@ -80,14 +83,40 @@ Driver ──onAction(action, meta{expression?, voice?})──► DeskPet ──
 - `once: true` 的 clip 不管 `meta.loop` 都只播一遍，播完淡回 `idle` 动作的 clip，并调用 `_onEnded`。
   （概率链对所有动作都发 `loop:true`，待机小动作循环十几秒会很怪，所以由素材声明决定。）
 - 禁用 Character 内部的 idle director（`idleVariants` 置空），待机小动作由 chain 驱动的 idle 池调度，与 pet-lib 驱动模型一致。
-- `setFacing('left'|'right')` → 身体 yaw ∓90°，平滑转身；`front` → 0。
+- **左右走 = 转模型，不转镜头**：灯光固定在世界空间，转镜头会让侧面光影跳变；镜头不动则待机/走路取景一致。
+  - `setFacing('left'|'right')` → 身体 yaw ∓`turnDeg`（pet.json `walk.turnDeg`，默认 70°，3/4 侧身，脸仍可见），沿用
+    Character 现有的平滑转身（`_targetYaw`，约 0.2s）；`front` → 0。
+  - 走动动作（`walk.left`/`walk.right`）开始时 DeskPet 先调 `renderer.setFacing`，结束（切到非走动作）时转回 `front`。
+  - **步速匹配**：渲染器提供 `getWalkSpeedPx(action)`：clip 的 m/s（`locomotion` 配置，Walk_F = 1.011）× 每米像素数
+    （由相机 fov、相机到角色距离和容器高度算出）× sin(turnDeg)（斜向走时屏幕上只看到水平分量）。
+    DeskPet `_startMove` 优先用它，渲染器不提供时回落 `walk.speed`。若实测脚步仍有滑动，`walk.speedScale` 可微调。
+
+**头部小动作层（gesture）**：程序化叠加在骨骼动画之上，让各 Agent 状态在身体上也有区分，无需新 clip。
+
+- 新文件 `pet-lib/renderers/_gltf-gestures.js`。每帧在 `mixer.update()` 之后、弹簧骨骼之前，对 `Bip001Head`、
+  `Bip001Neck`、`Bip001Spine2` 的 quaternion **右乘**一个小旋转（加性叠加，不覆盖 clip 本身的动作）。
+- 内置手势（参数化的时间函数，权重 0→1 淡入、结束淡出 0.3s）：
+
+  | 名字 | 表现 | 典型用途 |
+  |---|---|---|
+  | `nod` | 点头 2 次（头 pitch） | 完成、同意 |
+  | `shake` | 摇头（头 yaw） | 否定 |
+  | `tilt` | 歪头并保持（头 roll + 微 pitch） | 思考、疑惑 |
+  | `lookUp` | 抬头看向上方并保持 | 思考 |
+  | `lookDown` | 低头并保持 | 出错、难过 |
+  | `lean` | 上身前倾并保持（Spine2 pitch + 头回正） | 等用户、关注 |
+
+- 持续型（tilt/lookUp/lookDown/lean）一直保持到下一个 gesture 或 `setGesture(null)`；一次型（nod/shake）播完自动归零。
+- 骨骼名可在 pet.json `gestureBones: { head, neck, spine }` 覆盖，默认 Bip001 命名；找不到骨骼则该手势静默跳过。
+- 渲染器接口：`setGesture(name | null)`、`listGestures()`；`capabilities.gesture = true`。
 
 **three 版本**：importmap 统一升到 `three@0.170.0`，并加 `"three/addons/": ".../three@0.170.0/examples/jsm/"`
 （GLTFLoader 需要）。已有 `_three-model.js` 只用核心 API，0.160→0.170 兼容。
 
 ### 2. 语音层 `pet-lib/voice/`
 
-- `lipsync.js` — 移植 qingxiao `AudioLipSync`。改动：`play(src)` 接受 URL / `Blob` / `ArrayBuffer`；
+- `lipsync.js` — 移植 qingxiao `AudioLipSync`。它只分析音频信号（响度 + 频带），不依赖音素时间线，所以**对任意来源的语音都通用**：
+  预录 mp3、云 TTS 返回的音频、将来的克隆音色。改动：`play(src)` 接受 URL / `Blob` / `ArrayBuffer`；
   特征计算（rms 自适应、频带比 → `{open, wide, round}`）抽成纯函数 `mouthFeatures(timeData, freqData, sampleRate, fftSize, state)` 便于单测。
 - `visemes.js` — `charToViseme` + `textToVisemeTimeline(text)`（纯函数），用于没有音频流时按字估算口型。
 - `voice-pack.js` — `loadVoicePack(url)` → `{ lines, get(id), url(line) }`，相对路径按 index.json 所在目录解析。
@@ -132,9 +161,10 @@ voice: {
 
 ```jsonc
 "stateActions": {
-  "THINKING": { "action": "idle", "expression": "neutral", "voice": "thinking" },
-  "SUCCESS":  { "action": "fidget-2", "expression": "happy", "voice": "done" },
-  "ERROR":    { "action": "idle", "expression": "sad", "voice": "error" }
+  "THINKING":         { "action": "idle", "expression": "neutral", "gesture": "tilt",     "voice": "thinking" },
+  "WAITING_FOR_USER": { "action": "idle", "expression": "neutral", "gesture": "lean",     "voice": "wait" },
+  "SUCCESS":          { "action": "idle", "expression": "smile",   "gesture": "nod",      "voice": "done" },
+  "ERROR":            { "action": "idle", "expression": "sad",     "gesture": "lookDown", "voice": "error" }
 },
 "intentMap": {
   "happy": { "action": "fidget-1", "expression": "happy" },
@@ -142,11 +172,11 @@ voice: {
 }
 ```
 
-- 新增纯函数 `pet-lib/core/performance.js`：`resolvePerformance(value) → { action, expression?, voice?, say? } | null`。
-- StateDriver / ChainDriver 用它解析，`_emit(action, { ...meta, expression, voice })`。
+- 新增纯函数 `pet-lib/core/performance.js`：`resolvePerformance(value) → { action, expression?, gesture?, voice?, say? } | null`。
+- StateDriver / ChainDriver 用它解析，`_emit(action, { ...meta, expression, gesture, voice })`。
 - AgentBridge.reactTo 用它解析，然后调 `pet.perform(perf, meta)`。
-- `DeskPet.perform(perf, meta)`（新，内部也给 onAction 用）：播动作 → 有 `expression` 则切表情 → 有 `voice` 则在冷却外 `pet.voice()`。
-- 离开某状态时，如果该状态设过表情，恢复 `neutral`（状态表情不残留）。
+- `DeskPet.perform(perf, meta)`（新，内部也给 onAction 用）：播动作 → 有 `expression` 则切表情 → 有 `gesture` 则 `setGesture` → 有 `voice` 则在冷却外 `pet.voice()`。
+- 离开某状态时，如果该状态设过表情 / 持续型手势，恢复 `neutral` / `setGesture(null)`（不残留）。
 
 ### 4. 清霄素材包 `pets/qingxiao/`
 
@@ -168,7 +198,7 @@ pets/qingxiao/
 - **importmap**：playground、chat 统一 three@0.170 + addons（dashboard 不渲染宠物，不需要）。
 - **dashboard**：`RENDERER_GROUPS` 加 `gltf: { icon: '🧍', name: 'GLTF 3D 角色' }`；「互动」入口条件从
   `renderers.includes('webm')` 改为 `pack.chat === true`（webm 三只在 index.json 补 `"chat": true`，行为不变）。
-- **playground**：渲染器 `capabilities.expression` 时显示表情按钮行；pack 有 `voices` 时显示语音台词按钮行；
+- **playground**：渲染器 `capabilities.expression` 时显示表情按钮行，`capabilities.gesture` 时显示手势按钮行；pack 有 `voices` 时显示语音台词按钮行；
   始终显示「说话」输入框（任意文字 → `pet.speak`）。
 - **server**：`pet-registry.js` 收录条件改为 `entry.chat === true`（原「只收 webm」）；intents 依旧取 `intentMap` 的 key，
   对象值不影响。现有测试同步更新。
@@ -210,7 +240,8 @@ three 只在用 `three`/`gltf` 渲染器时懒加载，所以是可选 peer。RE
   - `core/performance.test.js`：字符串 / 对象 / 空值解析。
   - `voice/visemes.test.js`：字符 → viseme、时间线时长与收尾 rest。
   - `voice/lipsync.test.js`：`mouthFeatures` 静音闭嘴、响度归一化、高频 → wide。
+  - `renderers/_gltf-gestures` 的手势时间函数（纯函数部分）：权重淡入淡出、一次型结束归零。
   - `voice/voice-pack.test.js`：相对路径解析、`get(id)`。
   - `server/pet-registry.test.js`：改为按 `chat: true` 收录。
-- 浏览器手测（playground / chat）：加载清霄、动作切换、表情、预录语音口型、任意文字说话、状态机事件联动语音、拖拽、
+- 浏览器手测（playground / chat）：加载清霄、动作切换、表情、手势、左右走转身与步速、预录语音口型、任意文字说话、状态机事件联动语音、拖拽、
   setSize、切换渲染器后销毁无泄漏、聊天朗读与静音。
