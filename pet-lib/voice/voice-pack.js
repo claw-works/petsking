@@ -1,9 +1,18 @@
 // pet-lib/voice/voice-pack.js — 预录语音包
 //
 // 格式（与清霄语音包一致）：index.json = { lines: [{ id, text, label?, expression?, file, duration? }] }
-// file 相对 index.json 所在目录；以 / 或协议开头则原样使用。
+// file 相对 index.json 所在目录；以 / 或任意协议（http: blob: data: file: app: …）开头则原样使用。
 
-const ABS_RE = /^(https?:|blob:|data:|\/)/;
+const ABS_RE = /^([a-z][a-z0-9+.-]*:|\/)/i;
+
+/** 逐段编码（# ? 空格等都转义）；已编码过的段先解码再编码，避免 %XX 被二次编码 */
+function encodeSegment(seg) {
+  try {
+    return encodeURIComponent(decodeURIComponent(seg));
+  } catch {
+    return encodeURIComponent(seg);   // 含非法 % 序列，按原文编码
+  }
+}
 
 export function createVoicePack(data, baseUrl) {
   const lines = (data && data.lines) || [];
@@ -11,7 +20,12 @@ export function createVoicePack(data, baseUrl) {
   return {
     lines,
     get: (id) => byId.get(id) || null,
-    url: (line) => (ABS_RE.test(line.file) ? line.file : baseUrl + encodeURI(line.file)),
+    url: (line) => {
+      const file = line && line.file;
+      if (!file) return null;
+      if (ABS_RE.test(file)) return file;
+      return baseUrl + file.split('/').map(encodeSegment).join('/');
+    },
   };
 }
 

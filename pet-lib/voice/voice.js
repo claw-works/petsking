@@ -1,12 +1,17 @@
 // pet-lib/voice/voice.js — 语音调度：同一时刻只说一段，新的打断旧的；逐帧把口型推给渲染器
 //
-//   playAudio(src)   播音频（URL/Blob/ArrayBuffer），音频驱动口型
-//   speakText(text)  调 TTS provider：拿到音频走 playAudio；provider 自己出声则按字估算口型
+//   playAudio(src)   播音频（URL/Blob/ArrayBuffer/TypedArray），音频驱动口型
+//   speakText(text)  调 TTS provider（契约见 tts.js）：
+//                      返回音频 → 走音频播放；返回 { done } → 循环按字估算口型直到 done；返回 null → no-tts
 //   stop()
-// 返回值统一 { played: bool, reason?: 'locked'|'error'|'tts-error'|'empty', interrupted?: bool }
+// 返回值统一 { played: bool, reason?: 'locked'|'error'|'tts-error'|'no-tts'|'empty', interrupted?: bool }
+//
+// 打断模型：_begin() 先 stop() 再领一个 token；任何 await 之后 token 变了就说明被打断（新一段或 stop()）。
 import { AudioLipSync } from './lipsync.js';
 import { textToVisemeTimeline, visemeAt } from './visemes.js';
 import { browserTts, cancelBrowserTts } from './tts.js';
+
+const isSelfSpeaking = (r) => !!r && typeof r === 'object' && !!r.done && typeof r.done.then === 'function';
 
 export class Voice {
   /** @param {{ setMouth?: Function, tts?: Function, lang?: string, lipsync?: AudioLipSync }} opts */
@@ -17,7 +22,7 @@ export class Voice {
     this.lipsync = lipsync || new AudioLipSync();
     this._token = 0;
     this._raf = null;
-    this._pumpDone = null;
+    this._onStop = null;   // 当前一段的“被打断”回调，stop() 时触发
   }
 
   get unlocked() { return this.lipsync.unlocked; }
@@ -25,12 +30,19 @@ export class Voice {
 
   async playAudio(src) {
     if (!this.unlocked) return { played: false, reason: 'locked' };
-    const token = this._begin();
+    return this._playAudio(src, this._begin());
+  }
+
+  /** 播音频，不再 _begin()（调用方已经领了 token） */
+  async _playAudio(src, token) {
+    if (token !== this._token) return { played: false, interrupted: true };
     this._pump(() => this.lipsync.sample());
     try {
       await this.lipsync.play(src);
       return { played: true, interrupted: token !== this._token };
     } catch (e) {
+      if (token !== this._token) return { played: false, interrupted: true };
+      if (e && e.code === 'locked') return { played: false, reason: 'locked' };
       console.warn('[voice] play failed', e);
       return { played: false, reason: 'error' };
     } finally {
@@ -41,26 +53,39 @@ export class Voice {
   async speakText(text) {
     if (!text) return { played: false, reason: 'empty' };
     if (!this.unlocked) return { played: false, reason: 'locked' };
-    let audio = null;
+    // 先领 token（会取消上一段），再调 provider —— 否则 provider 刚排上的语音会被我们自己 cancel 掉
+    const token = this._begin();
+    let res = null;
     try {
-      audio = await this.tts(text, { lang: this.lang });
+      res = await this.tts(text, { lang: this.lang });
     } catch (e) {
+      if (token !== this._token) return { played: false, interrupted: true };
       console.warn('[voice] tts failed', e);
       return { played: false, reason: 'tts-error' };
     }
-    if (audio) return this.playAudio(audio);
-    // provider 自己出声：按字估算口型，时间线跑完即结束
-    const token = this._begin();
+    if (token !== this._token) return { played: false, interrupted: true };   // 慢请求期间被 stop/打断
+    if (!res) return { played: false, reason: 'no-tts' };
+    if (!isSelfSpeaking(res)) return this._playAudio(res, token);
+    return this._speakAlong(text, res.done, token);
+  }
+
+  /** provider 自己出声：循环按字估算口型；结束由 done（或打断）驱动，rAF 只负责动画 */
+  async _speakAlong(text, done, token) {
     const tl = textToVisemeTimeline(text);
-    const t0 = performance.now();
-    await new Promise((resolve) => {
-      this._pump(() => {
-        const t = (performance.now() - t0) / 1000;
-        return t >= tl.duration ? false : { viseme: visemeAt(tl, t) };
-      }, resolve);
+    let t0 = performance.now();
+    this._pump(() => {
+      const now = performance.now();
+      if (tl.duration > 0 && (now - t0) / 1000 >= tl.duration) t0 = now;   // 时间线跑完就从头再来
+      return { viseme: visemeAt(tl, (now - t0) / 1000) };
     });
-    if (token === this._token) this.setMouth(null);
-    return { played: true, interrupted: token !== this._token };
+    const stopped = new Promise((resolve) => { this._onStop = resolve; });
+    let failed = false;
+    await Promise.race([done.then(() => {}, () => { failed = true; }), stopped]);
+    if (token !== this._token) return { played: false, interrupted: true };
+    this._onStop = null;
+    this._stopPump();
+    this.setMouth(null);
+    return failed ? { played: false, reason: 'tts-error' } : { played: true, interrupted: false };
   }
 
   stop() {
@@ -69,14 +94,16 @@ export class Voice {
     this.lipsync.stop();
     cancelBrowserTts();
     this.setMouth(null);
+    const onStop = this._onStop;
+    this._onStop = null;
+    if (onStop) onStop();
   }
 
   _begin() { this.stop(); return this._token; }
 
   /** 每帧调 frameFn：返回口型帧（或 null=闭嘴）推给渲染器；返回 false 结束 */
-  _pump(frameFn, onDone) {
+  _pump(frameFn) {
     this._stopPump();
-    this._pumpDone = onDone || null;
     const step = () => {
       const f = frameFn();
       if (f === false) { this._stopPump(); return; }
@@ -87,10 +114,7 @@ export class Voice {
   }
 
   _stopPump() {
-    if (this._raf) cancelAnimationFrame(this._raf);
+    if (this._raf != null) cancelAnimationFrame(this._raf);
     this._raf = null;
-    const done = this._pumpDone;
-    this._pumpDone = null;
-    if (done) done();
   }
 }
